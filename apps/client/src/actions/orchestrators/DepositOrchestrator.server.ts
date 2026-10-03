@@ -118,8 +118,11 @@ export class DepositOrchestrator {
         process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
         (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY) as string
       );
-      await adminSupabase.from("profiles").update({ is_verified: true }).eq("id", tx.user_id);
-      console.log(`[DepositOrchestrator] Profil utilisateur ${tx.user_id} vérifié avec succès via le paiement.`);
+      await adminSupabase.from("profiles").update({ 
+        is_verified: true,
+        verified_by_tx_id: tx.id 
+      }).eq("id", tx.user_id);
+      console.log(`[DepositOrchestrator] Profil utilisateur ${tx.user_id} vérifié avec succès via le paiement (TX: ${tx.id}).`);
     } catch (err) {
       console.error("[DepositOrchestrator] Échec de la vérification du profil:", err);
     }
