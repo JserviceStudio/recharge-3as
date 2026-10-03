@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1e3a8a" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e2e8f0" />
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="200%" height="200%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <!-- Auto-adaptive background with rounded corners -->
+  <rect width="512" height="512" rx="120" fill="url(#bg)" />
+
+  <!-- Abstract Tech/Sports up-arrow (Growth/Recharge) -->
+  <path d="M 140 360 L 256 160 L 372 360" fill="none" stroke="#60a5fa" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" opacity="0.25" />
+  <path d="M 190 320 L 256 220 L 322 320" fill="none" stroke="#93c5fd" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" opacity="0.4" />
+
+  <!-- Bold 3AS Text -->
+  <text x="256" y="325" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="160" fill="url(#accent)" text-anchor="middle" filter="url(#shadow)" letter-spacing="-6">3AS</text>
+
+  <!-- Neon Green Recharge Indicator -->
+  <circle cx="256" cy="395" r="18" fill="#4ade80" filter="url(#shadow)" />
+</svg>
