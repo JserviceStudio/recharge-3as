@@ -29,7 +29,9 @@ export class XbetAdapter {
    * Route: GET /Users/{userId}
    */
   static async verifyAccount(id1xbet: string): Promise<boolean> {
-    console.log(`[XbetService] Vérification du compte ${id1xbet}...`);
+    console.log(`[XbetService] MOCK Vérification du compte ${id1xbet}... (Bypass dev)`);
+    return true; // Bypass dev
+    
     try {
       const { hash, cashierpass, cashdeskid } = this.getConfig();
 

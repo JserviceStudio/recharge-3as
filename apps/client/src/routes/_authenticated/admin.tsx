@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
-import { Loader2, LayoutDashboard, ListChecks, CreditCard, BarChart3, FileText, ChevronLeft } from "lucide-react";
+import { Loader2, LayoutDashboard, ListChecks, CreditCard, BarChart3, FileText, ChevronLeft, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs: { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
@@ -9,6 +9,7 @@ const tabs: { to: string; label: string; icon: typeof LayoutDashboard; exact?: b
   { to: "/admin/paiements", label: "Numéros", icon: CreditCard },
   { to: "/admin/stats", label: "Stats", icon: BarChart3 },
   { to: "/admin/logs", label: "Logs", icon: FileText },
+  { to: "/admin/settings", label: "Paramètres", icon: Settings },
 ];
 
 export const Route = createFileRoute("/_authenticated/admin")({

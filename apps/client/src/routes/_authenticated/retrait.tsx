@@ -61,7 +61,7 @@ function RetraitPage() {
     const method = methods?.find((m) => m.id === values.payment_method_id);
     
     try {
-      await submitWithdrawalFn({ 
+      const res = await submitWithdrawalFn({ 
         data: {
           id_1xbet: values.id_1xbet,
           amount: values.amount,
@@ -71,8 +71,25 @@ function RetraitPage() {
           recipient_number: values.recipient_number,
         }
       });
-      toast.success("Demande de retrait envoyée !");
-      navigate({ to: "/historique" });
+      
+      const adminLink = `${res.appUrl}/admin/demandes/${res.transaction.id}`;
+      const msg = `👋 Bonjour l'équipe 3AS, je souhaite finaliser mon retrait !
+
+👤 *ID 1XBET* : ${values.id_1xbet}
+💰 *Montant* : ${values.amount} FCFA
+🔐 *Code retrait* : ${values.tx_id}
+📱 *Numéro réception* : ${values.recipient_number} (${method?.name})
+
+👉 *Lien de validation Admin* : 
+${adminLink}
+`;
+      const encodedMsg = encodeURIComponent(msg);
+      // Nettoyage du numéro whatsapp (enlever les + et espaces)
+      const cleanNumber = res.adminWhatsapp.replace(/\D/g, "");
+      const waUrl = `https://wa.me/${cleanNumber}?text=${encodedMsg}`;
+      
+      toast.success("Redirection vers WhatsApp...");
+      window.location.href = waUrl;
     } catch (error: any) {
       toast.error("Erreur", { description: error.message });
     } finally {

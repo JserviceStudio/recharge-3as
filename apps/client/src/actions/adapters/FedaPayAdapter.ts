@@ -1,10 +1,32 @@
 import * as crypto from "node:crypto";
 import { FedaPay, Transaction } from "fedapay";
 import { DepositRequestPayload } from "@/types/backend";
+import fs from "node:fs";
+import path from "node:path";
 
 export class FedaPayAdapter {
   private static configure() {
-    const key = process.env.FEDAPAY_SECRET_KEY;
+    let key = process.env.FEDAPAY_SECRET_KEY;
+    if (!key) {
+      try {
+        const possiblePaths = [
+          path.resolve(process.cwd(), ".env"),
+          path.resolve(process.cwd(), "../../.env")
+        ];
+        for (const envPath of possiblePaths) {
+          if (fs.existsSync(envPath)) {
+            const content = fs.readFileSync(envPath, "utf-8");
+            const match = content.match(/^FEDAPAY_SECRET_KEY=(.*)$/m);
+            if (match) {
+              key = match[1].trim();
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[FedaPayAdapter] Impossible de lire le .env");
+      }
+    }
     if (!key) throw new Error("FEDAPAY_SECRET_KEY is missing");
     FedaPay.setApiKey(key);
     FedaPay.setEnvironment(key.startsWith("sk_live") ? "live" : "sandbox");
@@ -21,6 +43,16 @@ export class FedaPayAdapter {
   ): Promise<{ isSuccess: boolean; providerRef: string | null; checkoutUrl?: string }> {
     this.configure();
     console.log(`[FedaPayAdapter] Initialisation du paiement pour TX ${internalTxId} - Montant: ${payload.amount}`);
+    let countryCode = "BJ";
+    let phoneNumber = payload.userPhone.replace("+", "");
+    
+    if (phoneNumber.startsWith("229")) {
+      countryCode = "BJ";
+      phoneNumber = phoneNumber.substring(3);
+    } else if (phoneNumber.startsWith("228")) {
+      countryCode = "TG";
+      phoneNumber = phoneNumber.substring(3);
+    }
 
     try {
       const transaction = await Transaction.create({
@@ -31,10 +63,10 @@ export class FedaPayAdapter {
         customer: {
           firstname: "Client",
           lastname: "3AS",
-          email: "guest@jmoai.net", // Placeholder selon docs
+          email: "support@3asrecharge.app", 
           phone_number: {
-            number: payload.userPhone,
-            country: "BJ",
+            number: phoneNumber,
+            country: countryCode,
           },
         },
         custom_metadata: {

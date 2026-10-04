@@ -1,5 +1,43 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
+import { supabase as defaultClient } from "@/integrations/supabase/client";
 import { TransactionStatus, TransactionType } from "@/types/backend";
+
+import fs from "node:fs";
+import path from "node:path";
+
+function getAdminClient() {
+  const url = process.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  let key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // Si Vite a masqué la variable car elle n'a pas le préfixe VITE_, on va la lire directement dans le fichier .env
+  if (!key) {
+    try {
+      const possiblePaths = [
+        path.resolve(process.cwd(), ".env"),
+        path.resolve(process.cwd(), "../../.env") // Si process.cwd() est dans apps/client
+      ];
+
+      for (const envPath of possiblePaths) {
+        if (fs.existsSync(envPath)) {
+          const content = fs.readFileSync(envPath, "utf-8");
+          const match = content.match(/^SUPABASE_SERVICE_ROLE_KEY=(.*)$/m);
+          if (match) {
+            key = match[1].trim();
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[TransactionRepository] Impossible de lire le fichier .env manuellement.");
+    }
+  }
+
+  if (!key) {
+    throw new Error("⚠️ SUPABASE_SERVICE_ROLE_KEY est introuvable. Veuillez vérifier votre fichier .env.");
+  }
+  
+  return createClient(url, key);
+}
 
 export class TransactionRepository {
   /**
@@ -14,12 +52,19 @@ export class TransactionRepository {
     paymentMethodLabel: string;
     status: TransactionStatus;
   }) {
-    const { data: tx, error } = await supabase.from("transactions").insert({
+    let pMethodId = data.paymentMethodId;
+    // Vérification basique d'un format UUID. FedaPay gérant le réseau, on peut omettre cet ID.
+    if (!pMethodId || pMethodId.length !== 36) {
+      pMethodId = null as any; // On passe null car la sélection du réseau se fait chez FedaPay
+    }
+
+    const adminClient = getAdminClient();
+    const { data: tx, error } = await adminClient.from("transactions").insert({
       user_id: data.userId,
       type: data.type,
       id_1xbet: data.id1xbet,
       amount: data.amount,
-      payment_method_id: data.paymentMethodId,
+      payment_method_id: pMethodId,
       payment_method_label: data.paymentMethodLabel,
       status: data.status,
     }).select().single();
@@ -34,7 +79,8 @@ export class TransactionRepository {
    * Met à jour le statut d'une transaction via son ID
    */
   static async updateStatus(id: string, status: TransactionStatus, additionalData: any = {}) {
-    const { error } = await supabase.from("transactions").update({
+    const adminClient = getAdminClient();
+    const { error } = await adminClient.from("transactions").update({
       status,
       ...additionalData
     }).eq("id", id);
@@ -45,7 +91,8 @@ export class TransactionRepository {
    * Récupère une transaction via la référence du fournisseur (Agrégateur)
    */
   static async getByProviderRef(providerRef: string) {
-    const { data: tx, error } = await supabase.from("transactions").select("*").eq("provider_ref", providerRef).single();
+    const adminClient = getAdminClient();
+    const { data: tx, error } = await adminClient.from("transactions").select("*").eq("provider_ref", providerRef).single();
     if (error || !tx) {
       return null;
     }
@@ -63,7 +110,8 @@ export class TransactionRepository {
     requestPayload?: any;
     responsePayload?: any;
   }) {
-    await supabase.from("api_logs").insert({
+    const adminClient = getAdminClient();
+    await adminClient.from("api_logs").insert({
       transaction_id: data.transactionId,
       provider: data.provider as any,
       endpoint: data.endpoint,

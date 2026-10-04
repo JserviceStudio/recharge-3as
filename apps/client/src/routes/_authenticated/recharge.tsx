@@ -19,7 +19,6 @@ import { initiateDepositFn } from "@/lib/deposit.functions";
 const schema = z.object({
   id_1xbet: z.string().trim().min(3, "ID 1XBET invalide").max(30),
   amount: z.coerce.number().min(100, "Montant minimum 100 FCFA").max(10_000_000),
-  payment_method_id: z.string().uuid("Choisissez un moyen de paiement"),
 });
 
 export const Route = createFileRoute("/_authenticated/recharge")({
@@ -32,20 +31,14 @@ function RechargePage() {
   const [submitting, setSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
-  const { data: methods } = useQuery({
-    queryKey: ["payment-methods"],
-    queryFn: async () => {
-      const { data } = await supabase.from("payment_methods").select("*").eq("active", true).order("name");
-      return data ?? [];
-    },
-  });
+  // La sélection du réseau se fera directement sur la page FedaPay
+
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
       id_1xbet: "",
       amount: Number(localStorage.getItem("last_amount") ?? "100") || 100,
-      payment_method_id: "",
     },
   });
 
@@ -57,22 +50,20 @@ function RechargePage() {
     if (savedAmount) form.setValue("amount", Number(savedAmount) || 100, { shouldValidate: true });
   }, []);
 
-  const selectedMethod = methods?.find((m) => m.id === form.watch("payment_method_id"));
+
 
   const onSubmit = async (values: z.infer<typeof schema>) => {
     if (!user) return;
     setSubmitting(true);
 
     try {
-      const method = methods?.find((m) => m.id === values.payment_method_id);
-
       const res = await initiateDepositFn({
         data: {
           userId: user.id,
           id1xbet: values.id_1xbet,
           amount: values.amount,
-          paymentMethodId: values.payment_method_id,
-          paymentMethodLabel: method?.name ?? "Inconnu",
+          paymentMethodId: "fedapay-checkout",
+          paymentMethodLabel: "FedaPay",
           userPhone: user.user_metadata?.phone || user.phone || "00000000",
         }
       });
@@ -98,19 +89,17 @@ function RechargePage() {
     <div className="px-4 py-5 max-w-md mx-auto space-y-4">
       <PageHeader title="Nouvelle recharge" subtitle="Vers votre compte 1XBET" />
 
-      {selectedMethod && (
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider">
               <Info className="h-3.5 w-3.5" />
-              Paiement automatisé
+              Paiement sécurisé
             </div>
             <p className="text-xs text-muted-foreground">
-              Un popup s'affichera sur votre téléphone ({user?.user_metadata?.phone || user?.phone}) pour confirmer le paiement de {form.watch("amount") || 0} FCFA via {selectedMethod.name}.
+              Vous serez redirigé vers FedaPay pour choisir votre réseau (Mobile Money) et valider le paiement de {form.watch("amount") || 0} FCFA.
             </p>
           </CardContent>
         </Card>
-      )}
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <Card className="shadow-card">
@@ -123,16 +112,7 @@ function RechargePage() {
               <Input type="number" inputMode="numeric" placeholder="1000" {...form.register("amount")} />
             </Field>
 
-            <Field label="Moyen de paiement" error={form.formState.errors.payment_method_id?.message}>
-              <Select value={form.watch("payment_method_id")} onValueChange={(v) => form.setValue("payment_method_id", v, { shouldValidate: true })}>
-                <SelectTrigger><SelectValue placeholder="Choisir un moyen" /></SelectTrigger>
-                <SelectContent>
-                  {methods?.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+
 
           </CardContent>
         </Card>

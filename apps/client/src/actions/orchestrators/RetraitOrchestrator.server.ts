@@ -67,5 +67,18 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
 
     if (insertError) throw new Error(insertError.message);
 
-    return { success: true, transaction: newTx };
+    let whatsapp = "+22900000000";
+    let appUrl = "https://3as.vercel.app";
+    try {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const p = path.resolve(process.cwd(), "admin_settings.json");
+      if (fs.existsSync(p)) {
+        const settings = JSON.parse(fs.readFileSync(p, "utf-8"));
+        if (settings.whatsapp_number) whatsapp = settings.whatsapp_number;
+        if (settings.app_url) appUrl = settings.app_url;
+      }
+    } catch (e) {}
+
+    return { success: true, transaction: newTx, adminWhatsapp: whatsapp, appUrl };
   });

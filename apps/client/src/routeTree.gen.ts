@@ -22,6 +22,7 @@ import { Route as AuthenticatedAssistanceRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminStatsRouteImport } from './routes/_authenticated/admin.stats'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
 import { Route as AuthenticatedAdminPaiementsRouteImport } from './routes/_authenticated/admin.paiements'
 import { Route as AuthenticatedAdminLogsRouteImport } from './routes/_authenticated/admin.logs'
 import { Route as AuthenticatedAdminDemandesRouteImport } from './routes/_authenticated/admin.demandes'
@@ -94,6 +95,12 @@ const AuthenticatedAdminStatsRoute = AuthenticatedAdminStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminPaiementsRoute =
   AuthenticatedAdminPaiementsRouteImport.update({
     id: '/paiements',
@@ -138,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/admin/demandes': typeof AuthenticatedAdminDemandesRouteWithChildren
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/paiements': typeof AuthenticatedAdminPaiementsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/stats': typeof AuthenticatedAdminStatsRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/demandes/$id': typeof AuthenticatedAdminDemandesIdRoute
@@ -155,6 +163,7 @@ export interface FileRoutesByTo {
   '/verification': typeof AuthenticatedVerificationRoute
   '/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/admin/paiements': typeof AuthenticatedAdminPaiementsRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/stats': typeof AuthenticatedAdminStatsRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/demandes/$id': typeof AuthenticatedAdminDemandesIdRoute
@@ -176,6 +185,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/demandes': typeof AuthenticatedAdminDemandesRouteWithChildren
   '/_authenticated/admin/logs': typeof AuthenticatedAdminLogsRoute
   '/_authenticated/admin/paiements': typeof AuthenticatedAdminPaiementsRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/stats': typeof AuthenticatedAdminStatsRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/demandes/$id': typeof AuthenticatedAdminDemandesIdRoute
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/admin/demandes'
     | '/admin/logs'
     | '/admin/paiements'
+    | '/admin/settings'
     | '/admin/stats'
     | '/admin/'
     | '/admin/demandes/$id'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/verification'
     | '/admin/logs'
     | '/admin/paiements'
+    | '/admin/settings'
     | '/admin/stats'
     | '/admin'
     | '/admin/demandes/$id'
@@ -234,6 +246,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/demandes'
     | '/_authenticated/admin/logs'
     | '/_authenticated/admin/paiements'
+    | '/_authenticated/admin/settings'
     | '/_authenticated/admin/stats'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/demandes/$id'
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminStatsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/paiements': {
       id: '/_authenticated/admin/paiements'
       path: '/paiements'
@@ -397,6 +417,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminDemandesRoute: typeof AuthenticatedAdminDemandesRouteWithChildren
   AuthenticatedAdminLogsRoute: typeof AuthenticatedAdminLogsRoute
   AuthenticatedAdminPaiementsRoute: typeof AuthenticatedAdminPaiementsRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminStatsRoute: typeof AuthenticatedAdminStatsRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
@@ -405,6 +426,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminDemandesRoute: AuthenticatedAdminDemandesRouteWithChildren,
   AuthenticatedAdminLogsRoute: AuthenticatedAdminLogsRoute,
   AuthenticatedAdminPaiementsRoute: AuthenticatedAdminPaiementsRoute,
+  AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminStatsRoute: AuthenticatedAdminStatsRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
