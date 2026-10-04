@@ -111,6 +111,22 @@ export class DepositOrchestrator {
     // 6. Paiement validé
     await TransactionRepository.updateStatus(tx.id, "paid", { provider_status: status });
 
+    // 6.bis Mettre à jour le profil utilisateur (is_verified = true)
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(
+        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
+        (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY) as string
+      );
+      await adminSupabase.from("profiles").update({ 
+        is_verified: true,
+        verified_by_tx_id: tx.id 
+      }).eq("id", tx.user_id);
+      console.log(`[DepositOrchestrator] Profil utilisateur ${tx.user_id} vérifié avec succès via le paiement (TX: ${tx.id}).`);
+    } catch (err) {
+      console.error("[DepositOrchestrator] Échec de la vérification du profil:", err);
+    }
+
     // 7. Lancement asynchrone du crédit 1XBET
     XbetAdapter.creditAccountWithRetry(tx.id, tx.amount, tx.id_1xbet, providerRef).catch(console.error);
   }
