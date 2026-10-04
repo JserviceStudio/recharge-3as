@@ -8,6 +8,7 @@
     "dev": "concurrently \"bun run dev:client\" \"bun run dev:admin\"",
     "dev:client": "cd apps/client && bun run dev",
     "dev:admin": "cd apps/admin && bun run dev",
+    "build": "cd apps/client && /root/.bun/bin/bun run build && cd ../admin && /root/.bun/bin/bun run build",
     "typecheck": "cd apps/client && bun run typecheck && cd ../admin && bun run typecheck"
   },
   "devDependencies": {
