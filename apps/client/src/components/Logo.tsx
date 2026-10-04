@@ -9,8 +9,12 @@ export function Logo({ className, compact = false }: { className?: string; compa
       </div>
       {!compact && (
         <div className="leading-tight">
-          <div className="text-base font-bold text-foreground">3AS Recharge</div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">1XBET</div>
+          <div className="text-base font-bold text-foreground flex items-center uppercase tracking-tight">
+            3AS RECH
+            <span className="inline-block mx-[1px] text-[15px] animate-spin" style={{ animationDuration: '4s' }} role="img" aria-label="football">⚽</span>
+            RGE
+          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary mt-0.5">1XBET</div>
         </div>
       )}
     </div>

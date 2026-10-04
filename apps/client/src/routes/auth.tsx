@@ -4,7 +4,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Loader2, Phone, Lock, User as UserIcon, Eye, EyeOff, AlertCircle, CheckCircle2, Mail } from "lucide-react";
+import { Loader2, Phone, Lock, User as UserIcon, Eye, EyeOff, AlertCircle, CheckCircle2, Mail, Gift, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { phoneToEmail, normalizePhone, useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -57,16 +57,34 @@ function AuthPage() {
              <img src="/images/ucl-ball.png" alt="UCL Ball" className="w-full h-full object-cover" />
           </div>
           <div className="mt-2">
-            <h1 className="flex justify-center items-center gap-2 text-4xl font-black tracking-tight">
-              <span className="text-blue-700 drop-shadow-sm">3AS</span>
-              <span className={`text-3xl filter drop-shadow-md ${spinBall ? 'animate-spin' : ''}`} role="img" aria-label="football">⚽</span>
+            <h1 className="flex justify-center items-center gap-1 text-3xl sm:text-4xl font-black tracking-tight text-slate-900 uppercase">
+              <span className="text-blue-700 drop-shadow-sm mr-1">3AS</span>
+              RECH
+              <span className={`inline-block mx-0.5 text-3xl filter drop-shadow-md ${spinBall ? 'animate-spin' : ''}`} role="img" aria-label="football" style={{ animationDuration: '3s' }}>⚽</span>
+              RGE
             </h1>
             <p className="text-sm text-slate-500 font-medium max-w-[260px] mx-auto mt-2">
               Pariez avec passion. Rechargez et retirez vos gains 1XBET en un clin d'œil.
             </p>
           </div>
-          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-blue-50 px-5 py-2 text-xs font-bold text-blue-700 ring-1 ring-blue-100">
-            <span>Code Promo : FENOU229</span>
+          <div 
+            onClick={() => {
+              navigator.clipboard.writeText("FENOU229");
+              toast.success("Code promo FENOU229 copié ! 🎁");
+            }}
+            className="mt-4 mb-2 cursor-pointer group relative inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 shadow-lg shadow-orange-500/30 hover:scale-105 active:scale-95 transition-all duration-300 border border-orange-400/50"
+          >
+            <div className="absolute -top-3 -right-3 bg-white text-orange-600 text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-md rotate-12 group-hover:rotate-6 transition-transform border border-orange-100">
+              Bonus +200%
+            </div>
+            <Gift className="w-5 h-5 text-white animate-bounce" style={{ animationDuration: '2s' }} />
+            <div className="flex flex-col items-start text-left">
+              <span className="text-[10px] text-orange-100 font-bold uppercase tracking-wider leading-none mb-0.5">Code Promo Exclusif</span>
+              <span className="text-xl font-black text-white tracking-widest leading-none drop-shadow-sm">FENOU229</span>
+            </div>
+            <div className="ml-1 pl-3 border-l border-white/20 h-8 flex items-center justify-center">
+              <Copy className="w-5 h-5 text-white/80 group-hover:text-white group-hover:scale-110 transition-all" />
+            </div>
           </div>
         </div>
       </div>
