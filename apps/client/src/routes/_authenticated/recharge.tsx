@@ -19,6 +19,8 @@ import { initiateDepositFn } from "@/lib/deposit.functions";
 const schema = z.object({
   id_1xbet: z.string().trim().min(3, "ID 1XBET invalide").max(30),
   amount: z.coerce.number().min(100, "Montant minimum 100 FCFA").max(10_000_000),
+  phone: z.string().min(8, "Numéro invalide"),
+  network: z.string().min(2, "Veuillez choisir un réseau"),
 });
 
 export const Route = createFileRoute("/_authenticated/recharge")({
@@ -39,6 +41,8 @@ function RechargePage() {
     defaultValues: {
       id_1xbet: "",
       amount: Number(localStorage.getItem("last_amount") ?? "100") || 100,
+      phone: user?.user_metadata?.phone || user?.phone || "",
+      network: "mtn",
     },
   });
 
@@ -57,27 +61,23 @@ function RechargePage() {
     setSubmitting(true);
 
     try {
-      const res = await initiateDepositFn({
+      await initiateDepositFn({
         data: {
           userId: user.id,
           id1xbet: values.id_1xbet,
           amount: values.amount,
-          paymentMethodId: "fedapay-checkout",
-          paymentMethodLabel: "FedaPay",
-          userPhone: user.user_metadata?.phone || user.phone || "00000000",
+          paymentMethodId: "fedapay-direct",
+          paymentMethodLabel: "FedaPay Mobile Money",
+          userPhone: values.phone,
+          network: values.network
         }
       });
 
       localStorage.setItem("last_id_1xbet", values.id_1xbet);
       localStorage.setItem("last_amount", String(values.amount));
 
-      if (res.checkoutUrl) {
-        toast.info("Redirection vers la page de paiement...");
-        window.location.href = res.checkoutUrl;
-      } else {
-        toast.success("Demande envoyée !", { description: "Votre recharge est en attente de validation." });
-        navigate({ to: "/historique" });
-      }
+      toast.success("Demande envoyée !", { description: "Veuillez valider le paiement (Code PIN) sur votre téléphone." });
+      navigate({ to: "/historique" });
     } catch (error: any) {
       toast.error("Erreur", { description: error.message });
     } finally {
@@ -96,7 +96,7 @@ function RechargePage() {
               Paiement sécurisé
             </div>
             <p className="text-xs text-muted-foreground">
-              Vous serez redirigé vers FedaPay pour choisir votre réseau (Mobile Money) et valider le paiement de {form.watch("amount") || 0} FCFA.
+              Veuillez saisir votre numéro et réseau. Vous validerez directement le paiement sur votre téléphone.
             </p>
           </CardContent>
         </Card>
@@ -112,7 +112,23 @@ function RechargePage() {
               <Input type="number" inputMode="numeric" placeholder="1000" {...form.register("amount")} />
             </Field>
 
+            <Field label="Réseau Mobile" error={form.formState.errors.network?.message}>
+              <Select onValueChange={(val) => form.setValue("network", val)} defaultValue={form.getValues("network")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir un réseau" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mtn">MTN Bénin</SelectItem>
+                  <SelectItem value="moov">Moov Bénin</SelectItem>
+                  <SelectItem value="mtn_ci">MTN Côte d'Ivoire</SelectItem>
+                  <SelectItem value="moov_tg">Moov Togo</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
 
+            <Field label="Numéro de téléphone de paiement" error={form.formState.errors.phone?.message}>
+              <Input type="tel" placeholder="Ex: 22960000000" {...form.register("phone")} />
+            </Field>
 
           </CardContent>
         </Card>

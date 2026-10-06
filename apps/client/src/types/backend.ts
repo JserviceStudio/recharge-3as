@@ -16,6 +16,7 @@ export interface DepositRequestPayload {
   paymentMethodId: string;
   paymentMethodLabel: string;
   userPhone: string;
+  network: string;
 }
 
 export interface AggregatorWebhookPayload {

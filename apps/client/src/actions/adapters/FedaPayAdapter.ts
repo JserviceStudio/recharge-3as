@@ -12,25 +12,25 @@ export class FedaPayAdapter {
     FedaPay.setEnvironment(key.startsWith("sk_live") ? "live" : "sandbox");
   }
 
-  /**
-   * Crée une transaction Hosted Checkout FedaPay.
-   * Retourne l'URL de redirection et la référence fournisseur.
-   */
   static async createPaymentRequest(
     payload: DepositRequestPayload,
-    internalTxId: string,
-    returnUrl: string
-  ): Promise<{ isSuccess: boolean; providerRef: string | null; checkoutUrl?: string }> {
+    internalTxId: string
+  ): Promise<{ isSuccess: boolean; providerRef: string | null }> {
     this.configure();
-    console.log(`[FedaPayAdapter] Initialisation du paiement pour TX ${internalTxId} - Montant: ${payload.amount}`);
+    console.log(`[FedaPayAdapter] Initialisation du paiement DIRECT pour TX ${internalTxId}`);
+    
     let countryCode = "BJ";
     let phoneNumber = payload.userPhone.replace("+", "");
     
+    // Déduction du pays (peut être ajusté selon vos besoins)
     if (phoneNumber.startsWith("229")) {
       countryCode = "BJ";
       phoneNumber = phoneNumber.substring(3);
     } else if (phoneNumber.startsWith("228")) {
       countryCode = "TG";
+      phoneNumber = phoneNumber.substring(3);
+    } else if (phoneNumber.startsWith("225")) {
+      countryCode = "CI";
       phoneNumber = phoneNumber.substring(3);
     }
 
@@ -39,11 +39,10 @@ export class FedaPayAdapter {
         amount: Math.round(payload.amount),
         currency: { iso: "XOF" },
         description: `Recharge 3AS - Compte 1XBET ${payload.id1xbet}`,
-        callback_url: returnUrl,
         customer: {
           firstname: "Client",
           lastname: "3AS",
-          email: "support@3asrecharge.app", 
+          email: "support@3asrecharge.com", 
           phone_number: {
             number: phoneNumber,
             country: countryCode,
@@ -57,15 +56,16 @@ export class FedaPayAdapter {
         },
       });
 
-      const tokenResponse = await transaction.generateToken();
+      // LE CHANGEMENT MAGIQUE EST ICI : On envoie la requête push USSD directement au réseau
+      // payload.network doit correspondre aux codes FedaPay (ex: "mtn", "moov", "mtn_ci")
+      await transaction.sendNow(payload.network);
 
       return {
         isSuccess: true,
-        providerRef: String(transaction.id), // FedaPay internal ID
-        checkoutUrl: tokenResponse.url,
+        providerRef: String(transaction.id), // ID FedaPay
       };
     } catch (error: any) {
-      console.error("[FedaPayAdapter] Erreur création transaction:", error?.message || error);
+      console.error("[FedaPayAdapter] Erreur création transaction FedaDirect:", error?.message || error);
       return { isSuccess: false, providerRef: null };
     }
   }

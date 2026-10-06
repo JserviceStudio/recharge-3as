@@ -32,18 +32,15 @@ export class DepositOrchestrator {
       status: "awaiting_payment",
     });
 
-    // 3. Appel de l'API Agrégateur (FedaPay)
-    console.log(`[DepositOrchestrator] Initiation FedaPay pour TX ${tx.id}...`);
-    // Définition de l'URL de retour (où le client sera redirigé après paiement)
-    const returnUrl = `${process.env.PUBLIC_URL || "http://localhost:5173"}/historique?tx=${tx.id}`;
+    // 3. Appel de l'API Agrégateur (FedaPay Direct)
+    console.log(`[DepositOrchestrator] Initiation FedaPay Direct pour TX ${tx.id}...`);
     
-    const { isSuccess, providerRef, checkoutUrl } = await FedaPayAdapter.createPaymentRequest(
+    const { isSuccess, providerRef } = await FedaPayAdapter.createPaymentRequest(
       payload, 
-      tx.id,
-      returnUrl
+      tx.id
     );
 
-    if (!isSuccess || !providerRef || !checkoutUrl) {
+    if (!isSuccess || !providerRef) {
       await TransactionRepository.updateStatus(tx.id, "rejected", { failure_reason: "Échec initiation agrégateur" });
       throw new Error("Impossible d'initier le paiement avec l'opérateur.");
     }
@@ -57,11 +54,11 @@ export class DepositOrchestrator {
       provider: "fedapay",
       endpoint: "/v1/transactions",
       httpStatus: 200,
-      requestPayload: { amount: payload.amount, phone: payload.userPhone },
-      responsePayload: { ref: providerRef, checkoutUrl }
+      requestPayload: { amount: payload.amount, phone: payload.userPhone, network: payload.network },
+      responsePayload: { ref: providerRef }
     });
 
-    return { tx, checkoutUrl };
+    return { tx };
   }
 
   /**
