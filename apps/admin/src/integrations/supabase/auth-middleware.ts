@@ -3,8 +3,8 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
-
-
+// @ts-ignore
+import ws from 'ws'
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
@@ -47,17 +47,21 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       SUPABASE_URL!,
       SUPABASE_PUBLISHABLE_KEY!,
       {
+        realtime: {
+          transport: ws as any,
+        } as any,
         global: {
+          WebSocket: ws as any,
           headers: {
             Authorization: `Bearer ${token}`,
-          },
-        },
+          } as any,
+        } as any,
         auth: {
           storage: undefined,
           persistSession: false,
           autoRefreshToken: false,
-        },
-      }
+        } as any,
+      } as any
     );
 
     const { data, error } = await supabase.auth.getClaims(token);
@@ -74,7 +78,7 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
         supabase,
         userId: data.claims.sub,
         claims: data.claims,
-      },
+      } as any,
     });
   },
 );

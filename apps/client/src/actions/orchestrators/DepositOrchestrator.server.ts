@@ -2,6 +2,7 @@ import { TransactionRepository } from "../repositories/TransactionRepository";
 import { XbetAdapter } from "../adapters/XbetAdapter";
 import { FedaPayAdapter } from "../adapters/FedaPayAdapter";
 import { DepositRequestPayload, AggregatorWebhookPayload } from "@/types/backend";
+import { loadServerEnv } from "../../server-env";
 
 /**
  * Orchestrateur principal gérant le cycle de vie du dépôt.
@@ -12,6 +13,8 @@ export class DepositOrchestrator {
    * Étape 1 : Le client initie la demande
    */
   static async initiateDeposit(payload: DepositRequestPayload) {
+    loadServerEnv(); // Sécurité pour s'assurer que les env sont là
+    
     // 1. Vérification préalable 1XBET
     const isValid = await XbetAdapter.verifyAccount(payload.id1xbet);
     if (!isValid) {
@@ -65,6 +68,8 @@ export class DepositOrchestrator {
    * Étape 2 : L'agrégateur (FedaPay) notifie l'app via Webhook
    */
   static async handleAggregatorWebhook(payload: AggregatorWebhookPayload, signature: string) {
+    loadServerEnv(); // Important pour le webhook FedaPay et Supabase
+
     // 1. Valider la signature
     const isValidSig = FedaPayAdapter.verifyWebhookSignature(payload.rawPayload || payload, signature);
     if (!isValidSig) {

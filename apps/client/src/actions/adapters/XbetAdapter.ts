@@ -1,10 +1,12 @@
 import { TransactionRepository } from "../repositories/TransactionRepository";
 import * as crypto from "node:crypto";
+import { loadServerEnv } from "../../server-env";
 
 const BASE_URL = "https://partners.servcul.com/CashdeskBotAPI";
 
 export class XbetAdapter {
   private static getConfig() {
+    loadServerEnv();
     const hash = process.env.XBET_HASH;
     const cashierpass = process.env.XBET_CASHIERPASS;
     const cashdeskid = process.env.XBET_CASHDESKID;
@@ -29,9 +31,6 @@ export class XbetAdapter {
    * Route: GET /Users/{userId}
    */
   static async verifyAccount(id1xbet: string): Promise<boolean> {
-    console.log(`[XbetService] MOCK Vérification du compte ${id1xbet}... (Bypass dev)`);
-    return true; // Bypass dev
-    
     try {
       const { hash, cashierpass, cashdeskid } = this.getConfig();
 

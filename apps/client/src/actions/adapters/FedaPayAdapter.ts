@@ -1,32 +1,12 @@
 import * as crypto from "node:crypto";
 import { FedaPay, Transaction } from "fedapay";
 import { DepositRequestPayload } from "@/types/backend";
-import fs from "node:fs";
-import path from "node:path";
+import { loadServerEnv } from "../../server-env";
 
 export class FedaPayAdapter {
   private static configure() {
-    let key = process.env.FEDAPAY_SECRET_KEY;
-    if (!key) {
-      try {
-        const possiblePaths = [
-          path.resolve(process.cwd(), ".env"),
-          path.resolve(process.cwd(), "../../.env")
-        ];
-        for (const envPath of possiblePaths) {
-          if (fs.existsSync(envPath)) {
-            const content = fs.readFileSync(envPath, "utf-8");
-            const match = content.match(/^FEDAPAY_SECRET_KEY=(.*)$/m);
-            if (match) {
-              key = match[1].trim();
-              break;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("[FedaPayAdapter] Impossible de lire le .env");
-      }
-    }
+    loadServerEnv();
+    const key = process.env.FEDAPAY_SECRET_KEY;
     if (!key) throw new Error("FEDAPAY_SECRET_KEY is missing");
     FedaPay.setApiKey(key);
     FedaPay.setEnvironment(key.startsWith("sk_live") ? "live" : "sandbox");
@@ -95,6 +75,7 @@ export class FedaPayAdapter {
    * Valide que le Webhook provient bien de FedaPay (reprise stricte de jservices-api)
    */
   static verifyWebhookSignature(payload: any, signatureHeader: string): boolean {
+    loadServerEnv();
     const secret = process.env.FEDAPAY_WEBHOOK_SECRET;
     if (!secret || !signatureHeader) return false;
 
