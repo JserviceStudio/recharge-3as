@@ -64,11 +64,23 @@ export class DepositOrchestrator {
   /**
    * Étape 2 : L'agrégateur (FedaPay) notifie l'app via Webhook
    */
-  static async handleAggregatorWebhook(payload: AggregatorWebhookPayload, signature: string) {
+  /**
+   * `options.rawBody` : le corps EXACT reçu (la signature FedaPay se calcule dessus, pas sur un
+   * JSON reformaté). `options.verifiedByProviderApi` : réservé à la synchronisation, qui vient de
+   * relire la transaction CHEZ FedaPay par l'API — la source fait foi, aucune signature à vérifier.
+   * Jamais exposé par une route publique.
+   */
+  static async handleAggregatorWebhook(
+    payload: AggregatorWebhookPayload,
+    signature: string,
+    options: { rawBody?: string; verifiedByProviderApi?: boolean } = {},
+  ) {
     loadServerEnv(); // Important pour le webhook FedaPay et Supabase
 
     // 1. Valider la signature
-    const isValidSig = FedaPayAdapter.verifyWebhookSignature(payload.rawPayload || payload, signature);
+    const isValidSig =
+      options.verifiedByProviderApi === true ||
+      FedaPayAdapter.verifyWebhookSignature(options.rawBody ?? (payload.rawPayload || payload), signature);
     if (!isValidSig) {
       throw new Error("Signature Webhook Invalide");
     }

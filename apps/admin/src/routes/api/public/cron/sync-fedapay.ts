@@ -1,3 +1,4 @@
+import { loadServerEnv } from "@/server/server-env";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { Transaction } from "fedapay";
 import { FedaPayAdapter } from "@/server/adapters/FedaPayAdapter";
@@ -7,10 +8,10 @@ export const APIRoute = {
   GET: async ({ request }: { request: Request }) => {
     try {
       // Security: Cron should ideally be protected by a secret token
+      // Route publique : le secret est OBLIGATOIRE (sans lui, n'importe qui la déclenche).
       const authHeader = request.headers.get("Authorization");
-      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        // Just a warning for now, or we can enforce it.
-        // return new Response("Unauthorized", { status: 401 });
+      if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return new Response("Unauthorized", { status: 401 });
       }
 
       // Configure FedaPay
@@ -48,7 +49,7 @@ export const APIRoute = {
               status: "successful", // our internal mapping
               amount: fedaTx.amount,
               rawPayload: fedaTx
-            }, "bypass-signature");
+            }, "", { verifiedByProviderApi: true }); // statut relu chez FedaPay : il fait foi
             synced++;
           } else if (fedaTx.status === "declined" || fedaTx.status === "canceled") {
             await supabaseAdmin.from("transactions").update({ status: "rejected" }).eq("id", tx.id);
