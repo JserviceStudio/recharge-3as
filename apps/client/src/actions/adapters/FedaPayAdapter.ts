@@ -58,14 +58,31 @@ export class FedaPayAdapter {
 
       // LE CHANGEMENT MAGIQUE EST ICI : On envoie la requête push USSD directement au réseau
       // payload.network doit correspondre aux codes FedaPay (ex: "mtn", "moov", "mtn_ci")
-      await transaction.sendNow(payload.network);
+      // Codes réels de FedaPay (constatés sur nos paiements réussis) : l'écran envoie des noms
+      // courts. « mtn » n'existe pas chez FedaPay → HTTP 400 à l'envoi vers l'opérateur.
+      const MODES_FEDAPAY: Record<string, string> = {
+        mtn: "mtn_open",
+        mtn_bj: "mtn_open",
+        mtn_ci: "mtn_open_ci",
+        celtiis: "sbin",
+        celtiis_bj: "sbin",
+      };
+      const mode = MODES_FEDAPAY[String(payload.network || "").toLowerCase()] || payload.network;
+      console.log(`[FedaPayAdapter] Envoi vers l'opérateur : ${payload.network} → mode FedaPay ${mode}`);
+      await transaction.sendNow(mode);
 
       return {
         isSuccess: true,
         providerRef: String(transaction.id), // ID FedaPay
       };
     } catch (error: any) {
-      console.error("[FedaPayAdapter] Erreur création transaction FedaDirect:", error?.message || error);
+      // Le détail renvoyé par FedaPay (champ, code) : sans lui, « status code 400 » ne dit rien.
+      const detail = error?.errors || error?.httpResponse?.data || error?.response?.data || null;
+      console.error(
+        "[FedaPayAdapter] Erreur création transaction FedaDirect:",
+        error?.message || error,
+        detail ? JSON.stringify(detail).slice(0, 500) : "",
+      );
       return { isSuccess: false, providerRef: null };
     }
   }
