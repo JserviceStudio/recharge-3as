@@ -29,7 +29,9 @@ export const Route = createFileRoute("/api/public/cron/sync-fedapay")({
       }
 
       // 1. Fetch pending deposits older than 5 minutes
-      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      // 1 min (et non 5) : si le webhook FedaPay manque, le client est crédité en 1 à 2 min.
+      // Sans risque : on relit le statut réel chez FedaPay, et le crédit est fait une seule fois.
+      const fiveMinsAgo = new Date(Date.now() - 1 * 60 * 1000).toISOString();
       
       const { data: pendingTx, error } = await supabaseAdmin
         .from("transactions")
