@@ -1,69 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { XbetAdapter } from "../src/server/adapters/XbetAdapter";
-import { TransactionRepository } from "../src/server/repositories/TransactionRepository";
+import { XbetAdapter } from "../apps/admin/src/server/adapters/XbetAdapter";
+import { TransactionRepository } from "../apps/admin/src/server/repositories/TransactionRepository";
 
-// Mocking fetch globally
 global.fetch = vi.fn();
+vi.mock("../apps/admin/src/server/repositories/TransactionRepository");
 
-// Mock TransactionRepository
-vi.mock("../src/server/repositories/TransactionRepository");
-
-describe("XbetAdapter - Résilience & Algorithme de Retry", () => {
+// Règles 2026-10-13 : un dépôt n'est JAMAIS rejoué automatiquement (crédit multiple), la réponse
+// 1xBet est en PascalCase, et la signature de vérification utilise `userid` en minuscules.
+describe("XbetAdapter", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it("devrait retourner un succès si l'API répond 200 à la première tentative", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ success: true, messageId: "123456" }),
-    });
-
-    const success = await XbetAdapter.creditAccountWithRetry("TX_1", 1000, "12345", "FEDAPAY_123");
-    expect(success).toBe(true);
+  it("dépôt : succès en minuscules → validé, un seul appel", async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true, messageId: "1" }) });
+    expect(await XbetAdapter.creditAccountWithRetry("TX_1", 1000, "12345", "REF")).toBe(true);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("devrait réessayer et réussir si l'API échoue la 1ère fois mais réussit la 2ème", async () => {
-    (global.fetch as any)
-      .mockRejectedValueOnce(new Error("Network Error")) // 1er appel échoue
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, messageId: "123456" }),
-      }); // 2ème appel réussit
-
-    // On mock les timers pour éviter d'attendre vraiment 5 secondes pendant le test
-    vi.useFakeTimers();
-    
-    // On lance la fonction
-    const promise = XbetAdapter.creditAccountWithRetry("TX_1", 1000, "12345", "FEDAPAY_123");
-    
-    // On avance le temps pour dépasser le 1er délai (5000ms)
-    await vi.advanceTimersByTimeAsync(5000);
-    
-    const success = await promise;
-    expect(success).toBe(true);
-    expect(global.fetch).toHaveBeenCalledTimes(2); // 1er échec, 2ème réussite
-    
-    vi.useRealTimers();
+  it("dépôt : succès en PascalCase (Success) → validé", async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ Success: true, MessageId: 9 }) });
+    expect(await XbetAdapter.creditAccountWithRetry("TX_2", 1000, "12345", "REF")).toBe(true);
+    expect(TransactionRepository.updateStatus).toHaveBeenCalledWith("TX_2", "validated", expect.objectContaining({ xbet_credit_ref: "9" }));
   });
 
-  it("devrait échouer après toutes les tentatives épuisées", async () => {
-    // Toujours échouer
-    (global.fetch as any).mockRejectedValue(new Error("Timeout API"));
+  it("dépôt : refus explicite → failed_credit, aucun nouvel essai", async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ Success: false, Message: "Solde insuffisant" }) });
+    expect(await XbetAdapter.creditAccountWithRetry("TX_3", 1000, "12345", "REF")).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(TransactionRepository.updateStatus).toHaveBeenCalledWith("TX_3", "failed_credit", expect.objectContaining({ failure_reason: expect.stringContaining("Solde insuffisant") }));
+  });
 
-    vi.useFakeTimers();
-    const promise = XbetAdapter.creditAccountWithRetry("TX_1", 1000, "12345", "FEDAPAY_123");
+  it("dépôt : erreur réseau → INCERTAIN, aucun nouvel essai", async () => {
+    (global.fetch as any).mockRejectedValueOnce(new Error("timeout"));
+    expect(await XbetAdapter.creditAccountWithRetry("TX_4", 1000, "12345", "REF")).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(TransactionRepository.updateStatus).toHaveBeenCalledWith("TX_4", "failed_credit", expect.objectContaining({ failure_reason: expect.stringContaining("INCERTAIN") }));
+  });
 
-    // Avancer le temps pour couvrir tous les retries (5s, 30s, 2m, 5m, etc.)
-    await vi.advanceTimersByTimeAsync(1000000); 
-
-    const success = await promise;
-    expect(success).toBe(false);
-    expect((global.fetch as any).mock.calls.length).toBeGreaterThan(1); // Doit avoir essayé plusieurs fois
-    
-    vi.useRealTimers();
+  it("vérification : réponse PascalCase (UserId) → compte valide", async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ UserId: 624206417, Name: "X" }) });
+    expect(await XbetAdapter.verifyAccount("624206417")).toBe(true);
   });
 });

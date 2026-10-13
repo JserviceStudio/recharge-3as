@@ -37,10 +37,10 @@ export class XbetAdapter {
       const confirm = this.md5(`${id1xbet}:${hash}`);
 
       // Formation de la signature
-      // 1. SHA256(hash={0}&userId={1}&cashdeskid={2})
-      const part1 = this.sha256(`hash=${hash}&userId=${id1xbet}&cashdeskid=${cashdeskid}`);
-      // 2. MD5(userId={0}&cashierpass={1}&hash={2})
-      const part2 = this.md5(`userId=${id1xbet}&cashierpass=${cashierpass}&hash=${hash}`);
+      // 1. SHA256(hash={0}&userid={1}&cashdeskid={2}) — `userid` en MINUSCULES : avec `userId`, 1xBet répond 401 (testé le 2026-10-13).
+      const part1 = this.sha256(`hash=${hash}&userid=${id1xbet}&cashdeskid=${cashdeskid}`);
+      // 2. MD5(userid={0}&cashierpass={1}&hash={2})
+      const part2 = this.md5(`userid=${id1xbet}&cashierpass=${cashierpass}&hash=${hash}`);
       // 3. SHA256(part1 + part2)
       const sign = this.sha256(`${part1}${part2}`);
 
@@ -61,8 +61,8 @@ export class XbetAdapter {
 
       const data = await res.json();
       
-      // Si on a un nom ou userId dans la réponse, c'est bon
-      if (data && data.userId) {
+      // 1xBet répond en PascalCase : {"UserId":…,"Name":…,"CurrencyId":…}.
+      if (data && (data.UserId ?? data.userId)) {
         return true;
       }
       
@@ -78,15 +78,13 @@ export class XbetAdapter {
    * Route: POST Deposit/{userId}/Add
    */
   static async creditAccountWithRetry(transactionId: string, amount: number, id1xbet: string, providerRef: string) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAYS = [5000, 30000, 120000]; // 5s, 30s, 2m
-
+    // UN SEUL ESSAI. Rejouer un dépôt dont le résultat est incertain (délai dépassé, réponse
+    // illisible, succès écrit `Success` au lieu de `success`) créditerait le joueur plusieurs
+    // fois. Un échec passe en `failed_credit` avec sa raison : un humain vérifie sur 1xBet
+    // avant tout nouveau crédit.
     const { hash, cashierpass, cashdeskid } = this.getConfig();
     const lng = "fr";
-
-    // Formatage du montant (les APIs nécessitent parfois des entiers ou decimals, on s'assure d'un format propre)
-    // On suppose que amount est déjà un entier pour les FCFA, mais on l'assure au cas où.
-    const summa = Number(amount); 
+    const summa = Number(amount);
     const confirm = this.md5(`${id1xbet}:${hash}`);
 
     // Signature pour le dépôt ("Reception")
@@ -98,75 +96,57 @@ export class XbetAdapter {
     const sign = this.sha256(`${part1}${part2}`);
 
     const url = `${BASE_URL}/Deposit/${id1xbet}/Add`;
-    const body = {
-      cashdeskid: parseInt(cashdeskid),
-      lng,
-      summa,
-      confirm
-    };
+    const body = { cashdeskid: parseInt(cashdeskid), lng, summa, confirm };
+    const lire = (data: any, cle: string) =>
+      data && typeof data === "object"
+        ? data[cle] ?? data[cle.charAt(0).toUpperCase() + cle.slice(1)]
+        : undefined;
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        console.log(`[XbetAdapter] Tentative de crédit ${attempt}/${MAX_RETRIES} pour TX ${transactionId}...`);
-        
-        await TransactionRepository.updateStatus(transactionId, "crediting", { credit_attempts: attempt });
+    console.log(`[XbetAdapter] Crédit (essai unique) pour TX ${transactionId}...`);
+    await TransactionRepository.updateStatus(transactionId, "crediting", { credit_attempts: 1 });
 
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "sign": sign,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(body)
-        });
-
-        const data = await res.json().catch(() => null);
-
-        // 200 OK avec payload success
-        if (res.ok && data?.success === true) {
-          const xbetCreditRef = data.messageId ? String(data.messageId) : `XBET-OK-${Date.now()}`;
-
-          await TransactionRepository.updateStatus(transactionId, "validated", {
-            xbet_credit_ref: xbetCreditRef,
-            credited_at: new Date().toISOString()
-          });
-
-          await TransactionRepository.logApiCall({
-            transactionId,
-            provider: "xbet",
-            endpoint: `/Deposit/${id1xbet}/Add`,
-            httpStatus: res.status,
-            responsePayload: data
-          });
-
-          console.log(`[XbetAdapter] Crédit réussi pour TX ${transactionId}`);
-          return true;
-        }
-
-        // Si ce n'est pas un succès
-        throw new Error(`Erreur API 1XBET (HTTP ${res.status}): ${data?.message || 'Inconnue'}`);
-
-      } catch (error: any) {
-        console.error(`[XbetAdapter] Échec tentative ${attempt}:`, error.message);
-        
-        await TransactionRepository.logApiCall({
-          transactionId,
-          provider: "xbet",
-          endpoint: `/Deposit/${id1xbet}/Add`,
-          httpStatus: 500,
-          responsePayload: { error: error.message }
-        });
-
-        if (attempt < MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt - 1]));
-        } else {
-          await TransactionRepository.updateStatus(transactionId, "failed_credit", {
-            failure_reason: `Échec après ${MAX_RETRIES} tentatives: ${error.message}`
-          });
-          console.error(`[XbetAdapter] Abandon, passage en failed_credit pour TX ${transactionId}`);
-          return false;
-        }
-      }
+    let httpStatus = 0;
+    let data: any = null;
+    let erreurReseau: string | null = null;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { sign, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      });
+      httpStatus = res.status;
+      data = await res.json().catch(() => null);
+    } catch (error: any) {
+      erreurReseau = error?.message || String(error);
     }
+
+    await TransactionRepository.logApiCall({
+      transactionId,
+      provider: "xbet",
+      endpoint: `/Deposit/${id1xbet}/Add`,
+      httpStatus: httpStatus || 0,
+      responsePayload: data ?? { error: erreurReseau },
+    });
+
+    if (httpStatus >= 200 && httpStatus < 300 && lire(data, "success") === true) {
+      const messageId = lire(data, "messageId");
+      await TransactionRepository.updateStatus(transactionId, "validated", {
+        xbet_credit_ref: messageId ? String(messageId) : `XBET-OK-${Date.now()}`,
+        credited_at: new Date().toISOString(),
+      });
+      console.log(`[XbetAdapter] Crédit réussi pour TX ${transactionId}`);
+      return true;
+    }
+
+    // Refus explicite de 1xBet (Success=false + message) : rien n'a été crédité.
+    // Tout le reste (réseau, délai, réponse illisible) est INCERTAIN : vérifier avant de rejouer.
+    const refusExplicite = data && lire(data, "success") === false;
+    const raison = refusExplicite
+      ? `Refus 1XBET (HTTP ${httpStatus}): ${lire(data, "message") || "sans message"}`
+      : `RÉSULTAT INCERTAIN — vérifier sur 1XBET avant tout nouveau crédit (HTTP ${httpStatus || "aucune réponse"}${erreurReseau ? `, ${erreurReseau}` : ""})`;
+    await TransactionRepository.updateStatus(transactionId, "failed_credit", { failure_reason: raison });
+    console.error(`[XbetAdapter] Crédit non confirmé pour TX ${transactionId} : ${raison}`);
+    return false;
   }
 }
