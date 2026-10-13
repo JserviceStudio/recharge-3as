@@ -1,62 +1,60 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createFileRoute } from "@tanstack/react-router";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { loadServerEnv } from "@/server-env";
 
-export const APIRoute = {
-  GET: async ({ request }: { request: Request }) => {
-    try {
-      const authHeader = request.headers.get("Authorization");
-      // Fallback sur VITE_CRON_SECRET si on est dans un build Vite, sinon process.env
-      const cronSecret = import.meta.env.VITE_CRON_SECRET || process.env.CRON_SECRET;
-      
-      if (!cronSecret) {
-        return new Response(JSON.stringify({ error: "Configuration manquante (CRON_SECRET)" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
+/**
+ * Expire les dépôts abandonnés AVANT tout paiement : `awaiting_payment`, plus de 30 min, et
+ * AUCUNE référence FedaPay (l'envoi à l'opérateur n'a jamais abouti).
+ *
+ * Un dépôt qui a une référence FedaPay n'est JAMAIS expiré ici, quel que soit son âge : le client
+ * a peut-être payé (validation tardive, webhook perdu). C'est sync-fedapay qui relit son état réel
+ * chez FedaPay et le crédite ou le rejette. Avant le 2026-10-13, cette tâche expirait à 15 min sans
+ * rien vérifier : un paiement validé tard aurait été perdu.
+ */
+export const Route = createFileRoute("/api/public/cron/expire-pending")({
+  server: {
+    handlers: {
+      GET: async ({ request }: { request: Request }) => {
+        try {
+          loadServerEnv();
+          const cronSecret = process.env.CRON_SECRET;
+          if (!cronSecret || request.headers.get("Authorization") !== `Bearer ${cronSecret}`) {
+            return new Response("Unauthorized", { status: 401 });
+          }
 
-      if (authHeader !== `Bearer ${cronSecret}`) {
-        return new Response(JSON.stringify({ error: "Non autorisé" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
+          const limite = new Date(Date.now() - 30 * 60000).toISOString();
+          const { data: abandonnes, error } = await supabaseAdmin
+            .from("transactions")
+            .select("id")
+            .eq("status", "awaiting_payment")
+            .is("provider_ref", null)
+            .lt("created_at", limite)
+            .limit(500);
+          if (error) throw error;
 
-      // On cherche les transactions awaiting_payment de plus de 15 minutes
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60000).toISOString();
-      
-      const { data: expiredTxs, error: fetchErr } = await supabase
-        .from("transactions")
-        .select("id")
-        .eq("status", "awaiting_payment")
-        .lt("created_at", fifteenMinutesAgo);
-        
-      if (fetchErr) throw fetchErr;
-      
-      if (!expiredTxs || expiredTxs.length === 0) {
-        return new Response(JSON.stringify({ message: "Aucune transaction à purger" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
-      
-      const ids = expiredTxs.map(t => t.id);
-      
-      const { error: updateErr } = await supabase
-        .from("transactions")
-        .update({ status: "rejected", failure_reason: "Expiré (délai de paiement dépassé)" })
-        .in("id", ids);
-        
-      if (updateErr) throw updateErr;
+          const ids = (abandonnes || []).map((t: { id: string }) => t.id);
+          if (ids.length > 0) {
+            const { error: updateErr } = await supabaseAdmin
+              .from("transactions")
+              .update({ status: "rejected", failure_reason: "Expiré : paiement jamais initié auprès de l'opérateur" })
+              .in("id", ids)
+              .eq("status", "awaiting_payment")
+              .is("provider_ref", null);
+            if (updateErr) throw updateErr;
+          }
 
-      return new Response(JSON.stringify({ message: `${ids.length} transactions purgées` }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      });
-    } catch (error: any) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-  }
-};
+          return new Response(JSON.stringify({ success: true, expires: ids.length }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error: any) {
+          console.error("[Cron Expire Error]", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      },
+    },
+  },
+});

@@ -16,6 +16,11 @@ export class DepositOrchestrator {
     // 1. Vérification préalable 1XBET
     const isValid = await XbetAdapter.verifyAccount(payload.id1xbet);
     if (!isValid) {
+      if (XbetAdapter.derniereRaison === "CURRENCY_MISMATCH") {
+        throw new Error(
+          "Ce compte 1XBET n'est pas en francs CFA : la recharge est impossible sur ce compte. Aucun paiement n'a été demandé.",
+        );
+      }
       throw new Error("L'ID 1XBET fourni est invalide ou introuvable.");
     }
 

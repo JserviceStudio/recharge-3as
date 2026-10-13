@@ -5,6 +5,9 @@ import { loadServerEnv } from "../../server-env";
 const BASE_URL = "https://partners.servcul.com/CashdeskBotAPI";
 
 export class XbetAdapter {
+  /** Raison du dernier refus de verifyAccount (ex. CURRENCY_MISMATCH), pour un message clair. */
+  static derniereRaison: string | null = null;
+
   private static getConfig() {
     loadServerEnv();
     const hash = process.env.XBET_HASH;
@@ -63,6 +66,17 @@ export class XbetAdapter {
       
       // 1xBet répond en PascalCase : {"UserId":…,"Name":…,"CurrencyId":…}.
       if (data && (data.UserId ?? data.userId)) {
+        // La caisse ne crédite QUE les comptes de sa devise (27 = celle de notre caisse, prouvé
+        // le 2026-10-13 ; 26 → « La devise du PDV ne correspond pas »). Le refuser ICI, avant
+        // de demander le paiement : sinon le client paie et le crédit échoue.
+        const attendue = String(process.env.XBET_CURRENCY_ID || "27");
+        const devise = data.CurrencyId ?? data.currencyId;
+        if (devise != null && String(devise) !== attendue) {
+          this.derniereRaison = "CURRENCY_MISMATCH";
+          console.warn(`[XbetService] Compte ${id1xbet} en devise ${devise}, caisse en ${attendue} : refusé avant paiement.`);
+          return false;
+        }
+        this.derniereRaison = null;
         return true;
       }
       
