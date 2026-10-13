@@ -34,7 +34,8 @@ export const Route = createFileRoute("/api/public/cron/sync-fedapay")({
       const { data: pendingTx, error } = await supabaseAdmin
         .from("transactions")
         .select("*")
-        .eq("status", "pending")
+        // L'app crée ses dépôts en `awaiting_payment` : ne lire que `pending` ne trouvait rien.
+        .in("status", ["pending", "awaiting_payment"])
         .eq("type", "recharge")
         .lt("created_at", fiveMinsAgo)
         .not("provider_ref", "is", null)
