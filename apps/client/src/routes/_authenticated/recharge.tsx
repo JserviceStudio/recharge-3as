@@ -15,13 +15,26 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/PageHeader";
 import { initiateDepositFn } from "@/lib/deposit.functions";
+import { PAYS, normaliserNumero, reseauRecharge, reseauxDuPays, type CodePays } from "@/lib/mobile-money";
 
-const schema = z.object({
-  id_1xbet: z.string().trim().min(3, "ID 1XBET invalide").max(30),
-  amount: z.coerce.number().min(100, "Montant minimum 100 FCFA").max(10_000_000),
-  phone: z.string().min(8, "Numéro invalide"),
-  network: z.string().min(2, "Veuillez choisir un réseau"),
-});
+const schema = z
+  .object({
+    id_1xbet: z.string().trim().regex(/^\d{3,30}$/, "ID 1XBET invalide (chiffres uniquement)"),
+    amount: z.coerce.number().int("Montant entier uniquement").min(100, "Montant minimum 100 FCFA").max(10_000_000),
+    country: z.enum(["BJ", "TG"]),
+    network: z.string().min(2, "Veuillez choisir un réseau"),
+    phone: z.string().min(8, "Numéro invalide"),
+  })
+  .superRefine((v, ctx) => {
+    const reseau = reseauRecharge(v.network);
+    if (!reseau || reseau.pays !== v.country) {
+      ctx.addIssue({ code: "custom", path: ["network"], message: "Choisissez un réseau de ce pays" });
+    }
+    if (!normaliserNumero(v.country, v.phone)) {
+      const p = PAYS[v.country];
+      ctx.addIssue({ code: "custom", path: ["phone"], message: `Numéro ${p.nom} invalide (ex : ${p.exemple})` });
+    }
+  });
 
 export const Route = createFileRoute("/_authenticated/recharge")({
   component: RechargePage,
@@ -42,9 +55,11 @@ function RechargePage() {
       id_1xbet: "",
       amount: Number(localStorage.getItem("last_amount") ?? "100") || 100,
       phone: user?.user_metadata?.phone || user?.phone || "",
-      network: "mtn",
+      country: "BJ",
+      network: "mtn_bj",
     },
   });
+  const pays = form.watch("country") as CodePays;
 
   // Pré-remplit l'ID 1XBET et le montant utilisés lors de la dernière recharge
   useEffect(() => {
@@ -52,6 +67,12 @@ function RechargePage() {
     if (savedId) form.setValue("id_1xbet", savedId);
     const savedAmount = localStorage.getItem("last_amount");
     if (savedAmount) form.setValue("amount", Number(savedAmount) || 100, { shouldValidate: true });
+    // Dernier réseau utilisé (ancien code « mtn » compris) : le pays suit le réseau.
+    const savedNetwork = reseauRecharge(localStorage.getItem("last_network"));
+    if (savedNetwork) {
+      form.setValue("country", savedNetwork.pays);
+      form.setValue("network", savedNetwork.code);
+    }
   }, []);
 
 
@@ -63,18 +84,18 @@ function RechargePage() {
     try {
       await initiateDepositFn({
         data: {
-          userId: user.id,
           id1xbet: values.id_1xbet,
           amount: values.amount,
           paymentMethodId: "fedapay-direct",
           paymentMethodLabel: "FedaPay Mobile Money",
-          userPhone: values.phone,
-          network: values.network
+          userPhone: normaliserNumero(values.country, values.phone)!.e164,
+          network: values.network,
         }
       });
 
       localStorage.setItem("last_id_1xbet", values.id_1xbet);
       localStorage.setItem("last_amount", String(values.amount));
+      localStorage.setItem("last_network", values.network);
 
       toast.success("Demande envoyée !", { description: "Veuillez valider le paiement (Code PIN) sur votre téléphone." });
       navigate({ to: "/historique" });
@@ -112,22 +133,42 @@ function RechargePage() {
               <Input type="number" inputMode="numeric" placeholder="1000" {...form.register("amount")} />
             </Field>
 
+            <Field label="Pays" error={form.formState.errors.country?.message}>
+              <Select
+                value={pays}
+                onValueChange={(val) => {
+                  const p = val as CodePays;
+                  form.setValue("country", p);
+                  // Changer de pays remet le premier réseau de ce pays : jamais « MTN » au Togo.
+                  form.setValue("network", reseauxDuPays(p)[0].code, { shouldValidate: true });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir un pays" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PAYS) as CodePays[]).map((code) => (
+                    <SelectItem key={code} value={code}>{PAYS[code].nom} (+{PAYS[code].indicatif})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
             <Field label="Réseau Mobile" error={form.formState.errors.network?.message}>
-              <Select onValueChange={(val) => form.setValue("network", val)} defaultValue={form.getValues("network")}>
+              <Select value={form.watch("network")} onValueChange={(val) => form.setValue("network", val, { shouldValidate: true })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choisir un réseau" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mtn">MTN Bénin</SelectItem>
-                  <SelectItem value="moov">Moov Bénin</SelectItem>
-                  <SelectItem value="mtn_ci">MTN Côte d'Ivoire</SelectItem>
-                  <SelectItem value="moov_tg">Moov Togo</SelectItem>
+                  {reseauxDuPays(pays).map((r) => (
+                    <SelectItem key={r.code} value={r.code}>{r.nom}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
 
             <Field label="Numéro de téléphone de paiement" error={form.formState.errors.phone?.message}>
-              <Input type="tel" placeholder="Ex: 22960000000" {...form.register("phone")} />
+              <Input type="tel" inputMode="tel" placeholder={`+${PAYS[pays].indicatif} ${PAYS[pays].exemple}`} {...form.register("phone")} />
             </Field>
 
           </CardContent>

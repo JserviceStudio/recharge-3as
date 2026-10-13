@@ -3,6 +3,7 @@ import { XbetAdapter } from "../adapters/XbetAdapter";
 import { FedaPayAdapter } from "../adapters/FedaPayAdapter";
 import { DepositRequestPayload, AggregatorWebhookPayload } from "@/types/backend";
 import { loadServerEnv } from "../../server-env";
+import { PAYS, normaliserNumero, reseauRecharge } from "@/lib/mobile-money";
 
 /**
  * Orchestrateur principal gérant le cycle de vie du dépôt.
@@ -14,7 +15,19 @@ export class DepositOrchestrator {
    */
   static async initiateDeposit(payload: DepositRequestPayload) {
     loadServerEnv(); // Sécurité pour s'assurer que les env sont là
-    
+
+    // 0. Réseau et numéro contrôlés AVANT toute écriture : sinon une demande orpheline reste
+    // « Paiement attendu » sans qu'aucun paiement n'ait été demandé.
+    const reseau = reseauRecharge(payload.network);
+    if (!reseau) throw new Error("Choisissez un réseau Mobile Money pris en charge.");
+    if (!normaliserNumero(reseau.pays, payload.userPhone)) {
+      throw new Error(`Numéro ${PAYS[reseau.pays].nom} invalide (ex : +${PAYS[reseau.pays].indicatif} ${PAYS[reseau.pays].exemple}).`);
+    }
+    const montant = Number(payload.amount);
+    if (!Number.isInteger(montant) || montant < 100 || montant > 10_000_000) {
+      throw new Error("Montant invalide : minimum 100 FCFA, nombre entier.");
+    }
+
     // 1. Vérification préalable 1XBET
     const isValid = await XbetAdapter.verifyAccount(payload.id1xbet);
     if (!isValid) {
@@ -33,7 +46,7 @@ export class DepositOrchestrator {
       id1xbet: payload.id1xbet,
       amount: payload.amount,
       paymentMethodId: payload.paymentMethodId,
-      paymentMethodLabel: payload.paymentMethodLabel,
+      paymentMethodLabel: `FedaPay ${reseau.nom} ${PAYS[reseau.pays].nom}`,
       status: "awaiting_payment",
     });
 

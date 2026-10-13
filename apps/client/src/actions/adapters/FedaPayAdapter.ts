@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import { FedaPay, Transaction } from "fedapay";
 import { DepositRequestPayload } from "@/types/backend";
 import { loadServerEnv } from "../../server-env";
+import { PAYS, normaliserNumero, reseauRecharge } from "@/lib/mobile-money";
 
 export class FedaPayAdapter {
   private static configure() {
@@ -19,20 +20,14 @@ export class FedaPayAdapter {
     this.configure();
     console.log(`[FedaPayAdapter] Initialisation du paiement DIRECT pour TX ${internalTxId}`);
     
-    let countryCode = "BJ";
-    let phoneNumber = payload.userPhone.replace("+", "");
-    
-    // Déduction du pays (peut être ajusté selon vos besoins)
-    if (phoneNumber.startsWith("229")) {
-      countryCode = "BJ";
-      phoneNumber = phoneNumber.substring(3);
-    } else if (phoneNumber.startsWith("228")) {
-      countryCode = "TG";
-      phoneNumber = phoneNumber.substring(3);
-    } else if (phoneNumber.startsWith("225")) {
-      countryCode = "CI";
-      phoneNumber = phoneNumber.substring(3);
-    }
+    // Pays et mode FedaPay déduits du RÉSEAU choisi (catalogue partagé avec l'écran), plus du
+    // préfixe saisi : un numéro béninois ne part jamais vers un mode togolais.
+    const reseau = reseauRecharge(payload.network);
+    if (!reseau) throw new Error("Réseau Mobile Money non pris en charge.");
+    const numero = normaliserNumero(reseau.pays, payload.userPhone);
+    if (!numero) throw new Error(`Numéro ${PAYS[reseau.pays].nom} invalide.`);
+    const countryCode = reseau.pays;
+    const phoneNumber = numero.national;
 
     try {
       const transaction = await Transaction.create({
@@ -56,19 +51,8 @@ export class FedaPayAdapter {
         },
       });
 
-      // LE CHANGEMENT MAGIQUE EST ICI : On envoie la requête push USSD directement au réseau
-      // payload.network doit correspondre aux codes FedaPay (ex: "mtn", "moov", "mtn_ci")
-      // Codes réels de FedaPay (constatés sur nos paiements réussis) : l'écran envoie des noms
-      // courts. « mtn » n'existe pas chez FedaPay → HTTP 400 à l'envoi vers l'opérateur.
-      const MODES_FEDAPAY: Record<string, string> = {
-        mtn: "mtn_open",
-        mtn_bj: "mtn_open",
-        mtn_ci: "mtn_open_ci",
-        celtiis: "sbin",
-        celtiis_bj: "sbin",
-      };
-      const mode = MODES_FEDAPAY[String(payload.network || "").toLowerCase()] || payload.network;
-      console.log(`[FedaPayAdapter] Envoi vers l'opérateur : ${payload.network} → mode FedaPay ${mode}`);
+      const mode = reseau.modeFedapay;
+      console.log(`[FedaPayAdapter] Envoi vers l'opérateur : ${reseau.code} → mode FedaPay ${mode}`);
       await transaction.sendNow(mode);
 
       return {
