@@ -1,4 +1,6 @@
-import { supabase } from "@/integrations/supabase/client";
+// Côté serveur : client à clé de service. Le client public est soumis au RLS et ne voit pas
+// les transactions — la synchronisation ne trouvait aucun dépôt payé (2026-10-13).
+import { supabaseAdmin as supabase } from "@/integrations/supabase/client.server";
 import { TransactionStatus, TransactionType } from "@/types/backend";
 
 export class TransactionRepository {
