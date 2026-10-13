@@ -1,8 +1,13 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { DepositOrchestrator } from "@/actions/orchestrators/DepositOrchestrator.server";
 import { AggregatorWebhookPayload } from "@/types/backend";
 
-export const APIRoute = {
+// Format actuel de TanStack Start (server.handlers) : l'ancien `export const APIRoute` était
+// ignoré par la compilation, la route répondait 404 en production (2026-10-13).
+export const Route = createFileRoute("/api/public/webhooks/aggregator")({
+  server: {
+    handlers: {
   POST: async ({ request }: { request: Request }) => {
     try {
       // Corps EXACT : la signature FedaPay (en-tête x-fedapay-signature) porte sur ce texte.
@@ -32,4 +37,6 @@ export const APIRoute = {
       });
     }
   }
-};
+    },
+  },
+});

@@ -1,10 +1,15 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { loadServerEnv } from "@/server/server-env";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { Transaction } from "fedapay";
+import { FedaPay, Transaction } from "fedapay";
 import { FedaPayAdapter } from "@/server/adapters/FedaPayAdapter";
 import { DepositOrchestrator } from "@/server/orchestrators/DepositOrchestrator.server";
 
-export const APIRoute = {
+// Format actuel de TanStack Start (server.handlers) : l'ancien `export const APIRoute` était
+// ignoré par la compilation, la route répondait 404 en production (2026-10-13).
+export const Route = createFileRoute("/api/public/cron/sync-fedapay")({
+  server: {
+    handlers: {
   GET: async ({ request }: { request: Request }) => {
     try {
       // Security: Cron should ideally be protected by a secret token
@@ -19,7 +24,6 @@ export const APIRoute = {
       // FedaPayAdapter.configure(); // we will just use process.env here directly if needed
       const key = process.env.FEDAPAY_SECRET_KEY;
       if (key) {
-        const { FedaPay } = require("fedapay");
         FedaPay.setApiKey(key);
         FedaPay.setEnvironment(key.startsWith("sk_live") ? "live" : "sandbox");
       }
@@ -69,4 +73,6 @@ export const APIRoute = {
       return new Response(JSON.stringify({ error: error.message }), { status: 500 });
     }
   }
-};
+    },
+  },
+});

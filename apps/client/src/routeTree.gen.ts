@@ -27,6 +27,7 @@ import { Route as AuthenticatedAdminPaiementsRouteImport } from './routes/_authe
 import { Route as AuthenticatedAdminLogsRouteImport } from './routes/_authenticated/admin.logs'
 import { Route as AuthenticatedAdminDemandesRouteImport } from './routes/_authenticated/admin.demandes'
 import { Route as AuthenticatedAdminDemandesIndexRouteImport } from './routes/_authenticated/admin.demandes.index'
+import { Route as ApiPublicWebhooksAggregatorRouteImport } from './routes/api/public/webhooks/aggregator'
 import { Route as AuthenticatedAdminDemandesIdRouteImport } from './routes/_authenticated/admin.demandes.$id'
 
 const AuthRoute = AuthRouteImport.update({
@@ -124,6 +125,12 @@ const AuthenticatedAdminDemandesIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedAdminDemandesRoute,
   } as any)
+const ApiPublicWebhooksAggregatorRoute =
+  ApiPublicWebhooksAggregatorRouteImport.update({
+    id: '/api/public/webhooks/aggregator',
+    path: '/api/public/webhooks/aggregator',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedAdminDemandesIdRoute =
   AuthenticatedAdminDemandesIdRouteImport.update({
     id: '/$id',
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/admin/stats': typeof AuthenticatedAdminStatsRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/demandes/$id': typeof AuthenticatedAdminDemandesIdRoute
+  '/api/public/webhooks/aggregator': typeof ApiPublicWebhooksAggregatorRoute
   '/admin/demandes/': typeof AuthenticatedAdminDemandesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -167,6 +175,7 @@ export interface FileRoutesByTo {
   '/admin/stats': typeof AuthenticatedAdminStatsRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/demandes/$id': typeof AuthenticatedAdminDemandesIdRoute
+  '/api/public/webhooks/aggregator': typeof ApiPublicWebhooksAggregatorRoute
   '/admin/demandes': typeof AuthenticatedAdminDemandesIndexRoute
 }
 export interface FileRoutesById {
@@ -189,6 +198,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/stats': typeof AuthenticatedAdminStatsRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/demandes/$id': typeof AuthenticatedAdminDemandesIdRoute
+  '/api/public/webhooks/aggregator': typeof ApiPublicWebhooksAggregatorRoute
   '/_authenticated/admin/demandes/': typeof AuthenticatedAdminDemandesIndexRoute
 }
 export interface FileRouteTypes {
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/admin/stats'
     | '/admin/'
     | '/admin/demandes/$id'
+    | '/api/public/webhooks/aggregator'
     | '/admin/demandes/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/admin/stats'
     | '/admin'
     | '/admin/demandes/$id'
+    | '/api/public/webhooks/aggregator'
     | '/admin/demandes'
   id:
     | '__root__'
@@ -250,6 +262,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/stats'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/demandes/$id'
+    | '/api/public/webhooks/aggregator'
     | '/_authenticated/admin/demandes/'
   fileRoutesById: FileRoutesById
 }
@@ -257,6 +270,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicWebhooksAggregatorRoute: typeof ApiPublicWebhooksAggregatorRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -387,6 +401,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminDemandesIndexRouteImport
       parentRoute: typeof AuthenticatedAdminDemandesRoute
     }
+    '/api/public/webhooks/aggregator': {
+      id: '/api/public/webhooks/aggregator'
+      path: '/api/public/webhooks/aggregator'
+      fullPath: '/api/public/webhooks/aggregator'
+      preLoaderRoute: typeof ApiPublicWebhooksAggregatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/admin/demandes/$id': {
       id: '/_authenticated/admin/demandes/$id'
       path: '/$id'
@@ -463,6 +484,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicWebhooksAggregatorRoute: ApiPublicWebhooksAggregatorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
