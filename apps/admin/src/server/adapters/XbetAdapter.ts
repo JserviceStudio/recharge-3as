@@ -162,4 +162,105 @@ export class XbetAdapter {
     console.error(`[XbetAdapter] Crédit non confirmé pour TX ${transactionId} : ${raison}`);
     return false;
   }
+
+  /**
+   * Calcule la signature et le paramètre confirm pour le décaissement (Payout).
+   * Utilisé pour l'appel API 1XBET et les tests de validation vectorielle.
+   */
+  static computePayoutSignature(
+    hash: string,
+    cashierpass: string,
+    cashdeskid: string | number,
+    userId: string,
+    code: string,
+  ): { sign: string; confirm: string } {
+    // 1. SHA256(hash={0}&lng=fr&userid={1}) avec userid en minuscules
+    const part1 = this.sha256(`hash=${hash}&lng=fr&userid=${userId}`);
+    // 2. MD5(code={0}&cashierpass={1}&cashdeskid={2})
+    const part2 = this.md5(`code=${code}&cashierpass=${cashierpass}&cashdeskid=${cashdeskid}`);
+    // 3. SHA256(part1 + part2)
+    const sign = this.sha256(`${part1}${part2}`);
+    // confirm = MD5(userid:hash) avec userid en minuscules
+    const confirm = this.md5(`${userId}:${hash}`);
+    return { sign, confirm };
+  }
+
+  /**
+   * Encaisse un code de retrait 1XBET (Payout caisse).
+   * Route: POST {BASE_URL}/Deposit/{userId}/Payout
+   * Une seule tentative, timeout 30 s. Le code n'est jamais journalisé en clair.
+   */
+  static async payout(
+    userId: string,
+    code: string,
+    options: { transactionId?: string } = {},
+  ): Promise<
+    | { success: true; summa: number; messageId?: string | number; rawResponse: any }
+    | { success: false; explicitRejection: true; message: string; httpStatus: number; rawResponse: any }
+    | { success: false; explicitRejection: false; uncertain: true; message: string; httpStatus: number; error?: string }
+  > {
+    const { hash, cashierpass, cashdeskid } = this.getConfig();
+    const { sign, confirm } = this.computePayoutSignature(hash, cashierpass, cashdeskid, userId, code);
+    const url = `${BASE_URL}/Deposit/${userId}/Payout`;
+    const body = { cashdeskId: parseInt(cashdeskid), lng: "fr", code, confirm };
+
+    const lire = (data: any, cle: string) =>
+      data && typeof data === "object"
+        ? data[cle] ?? data[cle.charAt(0).toUpperCase() + cle.slice(1)]
+        : undefined;
+
+    let httpStatus = 0;
+    let data: any = null;
+    let erreurReseau: string | null = null;
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { sign, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      });
+      httpStatus = res.status;
+      data = await res.json().catch(() => null);
+    } catch (error: any) {
+      erreurReseau = error?.message || String(error);
+    }
+
+    // Journalisation sans jamais exposer le code de retrait en clair (code masqué: ***)
+    if (options.transactionId) {
+      await TransactionRepository.logApiCall({
+        transactionId: options.transactionId,
+        provider: "xbet",
+        endpoint: `/Deposit/${userId}/Payout`,
+        httpStatus: httpStatus || 0,
+        requestPayload: { cashdeskId: parseInt(cashdeskid), lng: "fr", code: "***", confirm },
+        responsePayload: data ?? { error: erreurReseau },
+      }).catch(console.error);
+    }
+
+    // Succès confirmé
+    if (httpStatus >= 200 && httpStatus < 300 && lire(data, "success") === true) {
+      const summaRaw = lire(data, "summa");
+      const summa = summaRaw !== undefined ? Math.abs(Number(summaRaw)) : 0;
+      const messageId = lire(data, "messageId");
+      return { success: true, summa, messageId, rawResponse: data };
+    }
+
+    // Refus explicite (Success: false avec motif)
+    if (data && lire(data, "success") === false) {
+      const msg = lire(data, "message") || "Code de retrait refusé par 1XBET";
+      return { success: false, explicitRejection: true, message: String(msg), httpStatus, rawResponse: data };
+    }
+
+    // Erreur réseau ou timeout : résultat INCERTAIN, AUCUN virement
+    const detail = erreurReseau || (httpStatus ? `HTTP ${httpStatus}` : "Pas de réponse");
+    return {
+      success: false,
+      explicitRejection: false,
+      uncertain: true,
+      message: `RÉSULTAT INCERTAIN : vérifier la caisse 1XBET avant tout virement (${detail})`,
+      httpStatus,
+      error: erreurReseau || undefined,
+    };
+  }
 }

@@ -13,53 +13,176 @@ export const validateTransaction = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: tx, error: e1 } = await supabaseAdmin
+
+    // Étape 1 : Réservation atomique (update status='paid' where id=... and status='pending' returning *)
+    // Évite tout double-clic ou double-traitement concurrent. Si 0 ligne, la demande a déjà été prise en charge.
+    const { data: updatedRows, error: eReserve } = await supabaseAdmin
       .from("transactions")
-      .select("*")
+      .update({
+        status: "paid",
+        validated_by: context.userId,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", data.id)
       .eq("status", "pending")
-      .single();
-    if (e1 || !tx) throw new Error(e1?.message || "Transaction introuvable");
+      .select();
 
-    let newStatus: import("@/integrations/supabase/types").Database["public"]["Enums"]["tx_status"] = "validated";
-    let providerRef = tx.provider_ref;
+    if (eReserve) throw new Error(eReserve.message);
+    if (!updatedRows || updatedRows.length === 0) {
+      throw new Error("Transaction déjà traitée ou introuvable.");
+    }
+    const tx = updatedRows[0];
 
-    // Si c'est un RETRAIT, on déclenche le transfert FedaPay (Payout)
-    if (tx.type === "withdrawal") {
-      const { FedaPayAdapter } = await import("@/server/adapters/FedaPayAdapter");
-      // Déduction du mode (MTN ou Moov) selon le label, par défaut mtn
-      const mode = tx.payment_method_label?.toLowerCase().includes("moov") ? "moov" : "mtn";
-      const phone = tx.recipient_number || "00000000";
+    // Traitement pour une RECHARGE manuelle
+    if (tx.type === "recharge") {
+      const { error: eValidate } = await supabaseAdmin
+        .from("transactions")
+        .update({
+          status: "validated",
+          validated_at: new Date().toISOString(),
+          validated_by: context.userId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", tx.id);
+      if (eValidate) throw new Error(eValidate.message);
 
-      const payout = await FedaPayAdapter.createPayout(tx.amount, phone, tx.id, mode);
-      
-      if (!payout.isSuccess) {
-        throw new Error("L'envoi des fonds via FedaPay a échoué. Vérifiez le solde du compte marchand.");
-      }
-      
-      // On passe en crediting, car FedaPay traite le transfert
-      newStatus = "crediting";
-      providerRef = payout.providerRef;
+      await supabaseAdmin.from("admin_logs").insert({
+        admin_id: context.userId,
+        action: "validate_transaction",
+        target_id: tx.id,
+        details: { amount: tx.amount, type: tx.type },
+      });
+      return { ok: true };
     }
 
-    const { error: eUpdate } = await supabaseAdmin
-      .from("transactions")
-      .update({ 
-        status: newStatus, 
-        validated_at: new Date().toISOString(), 
-        validated_by: context.userId,
-        provider_ref: providerRef
-      })
-      .eq("id", data.id);
-      
-    if (eUpdate) throw new Error(eUpdate.message);
+    // Traitement pour un RETRAIT (withdrawal)
+    // 1. Détermination du mode de virement et pays depuis payment_methods
+    let payoutMode = "mtn_open";
+    let country: import("./mobile-money").CodePays = (tx.recipient_country as any) || "BJ";
+
+    if (tx.payment_method_id) {
+      const { data: method } = await supabaseAdmin
+        .from("payment_methods")
+        .select("payout_mode, country")
+        .eq("id", tx.payment_method_id)
+        .maybeSingle();
+
+      if (method?.payout_mode) payoutMode = method.payout_mode;
+      if (method?.country) country = method.country as any;
+    }
+
+    // Normalisation du numéro pour FedaPay
+    const { normaliserNumero } = await import("./mobile-money");
+    const norm = normaliserNumero(country, tx.recipient_number || "");
+    const nationalPhone = norm ? norm.national : (tx.recipient_number || "").replace(/\D/g, "");
+
+    // Étape 2 : Encaissement du code chez 1XBET (une seule tentative, timeout 30 s)
+    const { XbetAdapter } = await import("@/server/adapters/XbetAdapter");
+    const xbetRes = await XbetAdapter.payout(tx.id_1xbet, tx.tx_id || "", { transactionId: tx.id });
+
+    if (!xbetRes.success) {
+      if (xbetRes.explicitRejection) {
+        // Refus explicite 1XBET -> rejected + motif, AUCUN virement
+        await supabaseAdmin.from("transactions").update({
+          status: "rejected",
+          rejection_reason: xbetRes.message,
+          validated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", tx.id);
+
+        await supabaseAdmin.from("admin_logs").insert({
+          admin_id: context.userId,
+          action: "reject_transaction_1xbet",
+          target_id: tx.id,
+          details: { reason: xbetRes.message },
+        });
+
+        throw new Error(`Encaissement 1XBET refusé : ${xbetRes.message}`);
+      } else {
+        // Délai ou erreur réseau -> failed_credit « RÉSULTAT INCERTAIN : vérifier la caisse 1XBET avant tout virement », AUCUN virement
+        const raison = xbetRes.message;
+        await supabaseAdmin.from("transactions").update({
+          status: "failed_credit",
+          failure_reason: raison,
+          updated_at: new Date().toISOString(),
+        }).eq("id", tx.id);
+
+        await supabaseAdmin.from("admin_logs").insert({
+          admin_id: context.userId,
+          action: "uncertain_1xbet_payout",
+          target_id: tx.id,
+          details: { reason: raison },
+        });
+
+        throw new Error(raison);
+      }
+    }
+
+    // Étape 3 : Montant à virer = Math.abs(Summa) (ce que la caisse a réellement reçu)
+    const montantReel = Math.abs(xbetRes.summa);
+    let discrepancyNote: string | null = null;
+    if (montantReel !== Number(tx.amount)) {
+      discrepancyNote = `Écart montant : déclaré ${tx.amount} FCFA, réel reçu 1XBET ${montantReel} FCFA. Virement du montant réel.`;
+    }
+    const xbetPayoutRef = xbetRes.messageId ? String(xbetRes.messageId) : `XBET-PAYOUT-${Date.now()}`;
+
+    // Étape 4 : Virement FedaPay : FedaPayAdapter.createPayout(montant, numéroNational, txId, payout_mode, pays)
+    const { FedaPayAdapter } = await import("@/server/adapters/FedaPayAdapter");
+    const payout = await FedaPayAdapter.createPayout(
+      montantReel,
+      nationalPhone,
+      tx.id,
+      payoutMode,
+      country,
+    );
+
+    if (!payout.isSuccess) {
+      // Échec virement -> failed_credit « code 1XBET encaissé, virement non parti » (l'argent est dans la caisse)
+      const raisonEchec = `code 1XBET encaissé, virement non parti${discrepancyNote ? ` (${discrepancyNote})` : ""}`;
+      await supabaseAdmin.from("transactions").update({
+        status: "failed_credit",
+        amount: montantReel,
+        xbet_payout_ref: xbetPayoutRef,
+        failure_reason: raisonEchec,
+        validated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", tx.id);
+
+      await supabaseAdmin.from("admin_logs").insert({
+        admin_id: context.userId,
+        action: "failed_payout_fedapay",
+        target_id: tx.id,
+        details: { error: payout.error, montant: montantReel, xbet_payout_ref: xbetPayoutRef },
+      });
+
+      throw new Error("Code 1XBET encaissé, mais le virement FedaPay a échoué. L'argent est dans la caisse.");
+    }
+
+    // Succès du déclenchement du virement -> crediting + provider_ref
+    await supabaseAdmin.from("transactions").update({
+      status: "crediting",
+      amount: montantReel,
+      xbet_payout_ref: xbetPayoutRef,
+      provider_ref: payout.providerRef,
+      failure_reason: discrepancyNote,
+      validated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", tx.id);
+
     await supabaseAdmin.from("admin_logs").insert({
       admin_id: context.userId,
       action: "validate_transaction",
-      target_id: data.id,
-      details: { amount: tx?.amount, type: tx?.type },
+      target_id: tx.id,
+      details: {
+        amount: montantReel,
+        type: tx.type,
+        xbet_payout_ref: xbetPayoutRef,
+        provider_ref: payout.providerRef,
+        discrepancy: discrepancyNote,
+      },
     });
-    return { ok: true };
+
+    return { ok: true, amount: montantReel };
   });
 
 export const rejectTransaction = createServerFn({ method: "POST" })

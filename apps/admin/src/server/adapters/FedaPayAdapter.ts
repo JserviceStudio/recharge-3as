@@ -61,15 +61,17 @@ export class FedaPayAdapter {
   /**
    * Crée un transfert (Payout) FedaPay pour envoyer de l'argent au client.
    * Utilisé lors de la validation d'un Retrait.
+   * Mode et pays tirés de payment_methods (ex: mtn_open, moov, sbin, togocel / BJ, TG).
    */
   static async createPayout(
     amount: number,
     phoneNumber: string,
     internalTxId: string,
-    mode: string = "mtn" // ou moov
-  ): Promise<{ isSuccess: boolean; providerRef: string | null }> {
+    mode: string = "mtn_open",
+    country: string = "BJ",
+  ): Promise<{ isSuccess: boolean; providerRef: string | null; error?: string }> {
     this.configure();
-    console.log(`[FedaPayAdapter] Initialisation Payout pour TX ${internalTxId} - Montant: ${amount}`);
+    console.log(`[FedaPayAdapter] Initialisation Payout pour TX ${internalTxId} - Montant: ${amount}, Mode: ${mode}, Pays: ${country}`);
 
     try {
       const payout = await Payout.create({
@@ -79,10 +81,10 @@ export class FedaPayAdapter {
         customer: {
           firstname: "Client",
           lastname: "Retrait",
-          email: "payout@jmoai.net",
+          email: "payout@3asrecharge.com",
           phone_number: {
             number: phoneNumber,
-            country: "BJ",
+            country: country,
           },
         },
         custom_metadata: {
@@ -94,7 +96,7 @@ export class FedaPayAdapter {
       // Lancer le transfert immédiatement
       if (typeof payout.sendNow === "function") {
         await payout.sendNow();
-      } else {
+      } else if (typeof payout.send === "function") {
         await payout.send(); // fallback
       }
 
@@ -104,7 +106,7 @@ export class FedaPayAdapter {
       };
     } catch (error: any) {
       console.error("[FedaPayAdapter] Erreur création Payout:", error?.message || error);
-      return { isSuccess: false, providerRef: null };
+      return { isSuccess: false, providerRef: null, error: error?.message || String(error) };
     }
   }
 

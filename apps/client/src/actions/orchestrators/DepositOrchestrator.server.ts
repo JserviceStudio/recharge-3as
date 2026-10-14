@@ -103,6 +103,14 @@ export class DepositOrchestrator {
       throw new Error("Signature Webhook Invalide");
     }
 
+    // Sécurité Webhook : Ne traiter que les événements transaction.* pour les recharges
+    // (FedaPay sépare les IDs de transaction et payout dans deux espaces distincts)
+    const eventName = (payload.rawPayload as any)?.name || (payload.rawPayload as any)?.event;
+    if (eventName && !String(eventName).startsWith("transaction.")) {
+      console.log(`[DepositOrchestrator] Événement ignoré car non-transaction (${eventName}).`);
+      return;
+    }
+
     // Extraction de la référence et du statut (selon la structure de FedaPay)
     const entity = (payload.rawPayload as any)?.entity || payload.rawPayload;
     // FedaPay envoie le statut sous `status` (ex: "approved", "canceled") et l'ID sous `id`
@@ -116,6 +124,12 @@ export class DepositOrchestrator {
     const tx = await TransactionRepository.getByProviderRef(providerRef);
     if (!tx) {
       console.error(`Transaction non trouvée pour la réf ${providerRef}`);
+      return;
+    }
+
+    // Un webhook de recharge ne doit JAMAIS altérer un retrait (tx.type === 'recharge' strict)
+    if (tx.type !== "recharge") {
+      console.log(`[DepositOrchestrator] TX ${tx.id} ignorée car de type ${tx.type} (seules les recharges sont traitées).`);
       return;
     }
 

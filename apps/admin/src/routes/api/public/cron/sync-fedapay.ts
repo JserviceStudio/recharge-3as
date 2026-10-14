@@ -67,7 +67,50 @@ export const Route = createFileRoute("/api/public/cron/sync-fedapay")({
         }
       }
 
-      return new Response(JSON.stringify({ success: true, synced, total_checked: pendingTx?.length || 0 }), {
+      // 2. Relire les retraits en statut 'crediting' pour vérifier le statut réel du virement FedaPay
+      const { data: creditingWithdrawals, error: errW } = await supabaseAdmin
+        .from("transactions")
+        .select("*")
+        .eq("status", "crediting")
+        .eq("type", "withdrawal")
+        .not("provider_ref", "is", null)
+        .limit(50);
+
+      if (errW) {
+        console.error("Error fetching crediting withdrawals", errW);
+      } else {
+        for (const tx of (creditingWithdrawals || [])) {
+          try {
+            const payout = await Payout.retrieve(tx.provider_ref);
+            const status = String(payout?.status || "").toLowerCase();
+            // Statut FedaPay payout : 'sent' (ou approved) -> validated + credited_at
+            if (status === "sent" || status === "approved" || status === "successful") {
+              await supabaseAdmin.from("transactions").update({
+                status: "validated",
+                credited_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }).eq("id", tx.id);
+              synced++;
+            } else if (status === "failed" || status === "declined" || status === "canceled" || status === "rejected") {
+              // 'failed' -> failed_credit
+              await supabaseAdmin.from("transactions").update({
+                status: "failed_credit",
+                failure_reason: `Virement FedaPay échoué (${payout?.status || "failed"})`,
+                updated_at: new Date().toISOString(),
+              }).eq("id", tx.id);
+              synced++;
+            }
+          } catch (e) {
+            console.error(`Error syncing withdrawal payout for tx ${tx.id}`, e);
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced, 
+        total_checked: (pendingTx?.length || 0) + (creditingWithdrawals?.length || 0) 
+      }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       });

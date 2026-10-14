@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge, TypeBadge } from "@/components/StatusBadge";
-import { ChevronLeft, CheckCircle2, XCircle, Loader2, User, Phone, Hash, CreditCard, FileText, Image as ImageIcon, RefreshCw, Edit3 } from "lucide-react";
+import { ChevronLeft, CheckCircle2, XCircle, Loader2, User, Phone, Hash, CreditCard, FileText, Image as ImageIcon, RefreshCw, Edit3, MapPin, Globe } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/admin/demandes/$id")({
@@ -35,7 +35,7 @@ function DemandeDetail() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("full_name, phone")
+        .select("full_name, phone, city, district")
         .eq("id", data.user_id)
         .maybeSingle();
       if (profileError) throw profileError;
@@ -147,10 +147,23 @@ function DemandeDetail() {
           <div className="space-y-2 pt-2 border-t border-border">
             <Row icon={User} label="Client" value={tx.profiles?.full_name ?? "—"} />
             <Row icon={Phone} label="Téléphone" value={tx.profiles?.phone ?? "—"} />
-            <Row icon={Hash} label="ID 1XBET" value={tx.id_1xbet} mono />
+            {tx.recipient_name && <Row icon={User} label="Nom bénéficiaire" value={tx.recipient_name} />}
+            {tx.recipient_country && (
+              <Row icon={Globe} label="Pays" value={tx.recipient_country === "TG" ? "Togo" : "Bénin"} />
+            )}
+            {tx.app_code && <Row icon={Hash} label="Application" value={tx.app_code.toUpperCase()} />}
+            <Row icon={Hash} label="ID Joueur" value={tx.id_1xbet} mono />
             <Row icon={CreditCard} label="Moyen" value={tx.payment_method_label} />
             {tx.tx_id && <Row icon={FileText} label={tx.type === "recharge" ? "ID translation" : "Code retrait"} value={tx.tx_id} mono />}
             {tx.recipient_number && <Row icon={Phone} label="Numéro réception" value={tx.recipient_number} mono />}
+            {(tx.profiles?.city || tx.profiles?.district) && (
+              <Row
+                icon={MapPin}
+                label="Ville / Quartier"
+                value={[tx.profiles?.city, tx.profiles?.district].filter(Boolean).join(", ")}
+              />
+            )}
+            {tx.xbet_payout_ref && <Row icon={FileText} label="Réf encaissement 1XBET" value={tx.xbet_payout_ref} mono />}
           </div>
 
           {proofUrl && (
