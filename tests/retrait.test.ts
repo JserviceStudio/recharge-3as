@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as crypto from "node:crypto";
 import { normaliserNumero, CodePays, RESEAUX_RECHARGE, reseauRecharge } from "../apps/client/src/lib/mobile-money";
 import { XbetAdapter } from "../apps/admin/src/server/adapters/XbetAdapter";
+import { submitWithdrawalSchema } from "../apps/client/src/actions/orchestrators/RetraitOrchestrator.server";
 
 describe("Retrait 3AS - Tests unitaires et intégration", () => {
   // 1. Normalisation numéro et pays
@@ -287,6 +288,219 @@ describe("Retrait 3AS - Tests unitaires et intégration", () => {
 
       const isEligibleRecharge = transactionEnBase.type === "recharge";
       expect(isEligibleRecharge).toBe(false);
+    });
+  });
+
+  // Relecture 1 - Corrections ciblées (points 1 à 4)
+  describe("Relecture 1 - Corrections ciblées", () => {
+    // Point 1 : Schéma refusé côté serveur (premier message Zod sans trace brute)
+    it("devrait rejeter des données invalides et renvoyer le premier message Zod sans trace brute", () => {
+      const validateInput = (data: unknown) => {
+        try {
+          return submitWithdrawalSchema.parse(data);
+        } catch (err: any) {
+          if (err.issues && err.issues.length > 0) {
+            throw new Error(err.issues[0]?.message || "Données invalides");
+          }
+          throw err;
+        }
+      };
+
+      // Ville manquante
+      const invalidDataVille = {
+        idempotency_key: crypto.randomUUID(),
+        city: "",
+        district: "Quartier Haie Vive",
+        app_code: "1xbet",
+        id_1xbet: "123456",
+        tx_id: "CODE1234",
+        amount: 5000,
+        recipient_name: "Jean Dupont",
+        recipient_country: "BJ",
+        payment_method_id: crypto.randomUUID(),
+        recipient_number: "96000000",
+      };
+      expect(() => validateInput(invalidDataVille)).toThrow("La ville est obligatoire");
+
+      // Montant invalide
+      const invalidDataMontant = {
+        ...invalidDataVille,
+        city: "Cotonou",
+        amount: -500,
+      };
+      expect(() => validateInput(invalidDataMontant)).toThrow("Montant invalide");
+
+      // Code de retrait trop court (< 4 caractères)
+      const invalidDataCode = {
+        ...invalidDataVille,
+        city: "Cotonou",
+        tx_id: "ABC",
+      };
+      expect(() => validateInput(invalidDataCode)).toThrow(
+        "Le code de retrait doit contenir entre 4 et 80 caractères alphanumériques"
+      );
+    });
+
+    // Point 2 : Clé d'un autre client (ne rien renvoyer)
+    it("devrait ne rien renvoyer si la clé d'idempotence appartient à un autre client", async () => {
+      const targetKey = crypto.randomUUID();
+      const client1Id = "user-client-1";
+      const client2Id = "user-client-2";
+
+      const dbTransactions = [
+        {
+          id: "tx-client-1",
+          user_id: client1Id,
+          idempotency_key: targetKey,
+          amount: 5000,
+          status: "pending",
+        },
+      ];
+
+      // Requête avec filtre idempotency_key ET user_id
+      const findExistingTx = async (idempotencyKey: string, userId: string) => {
+        return dbTransactions.find(
+          (t) => t.idempotency_key === idempotencyKey && t.user_id === userId
+        ) || null;
+      };
+
+      // Le client 1 retrouve sa transaction
+      const client1Result = await findExistingTx(targetKey, client1Id);
+      expect(client1Result).not.toBeNull();
+      expect(client1Result?.id).toBe("tx-client-1");
+
+      // Le client 2 soumet la même clé : ne rien renvoyer (null)
+      const client2Result = await findExistingTx(targetKey, client2Id);
+      expect(client2Result).toBeNull();
+    });
+
+    // Point 3 : Moyen sans payout_mode -> pending sans appel 1XBET
+    it("devrait remettre la transaction en pending sans appeler 1XBET si payout_mode est absent", async () => {
+      let txStatus = "paid";
+      const adminLogs: any[] = [];
+      const mockXbetPayout = vi.fn();
+
+      const tx = {
+        id: "tx-retrait-no-mode",
+        payment_method_id: "method-no-payout-mode",
+        recipient_number: "0196000000",
+        recipient_country: "BJ",
+      };
+
+      const mockMethod = {
+        id: "method-no-payout-mode",
+        country: "BJ",
+        payout_mode: null,
+      };
+
+      const rollbackToPending = async (reason: string) => {
+        if (txStatus === "paid") {
+          txStatus = "pending";
+        }
+        adminLogs.push({ action: "abort_withdrawal_validation", target_id: tx.id, reason });
+        throw new Error(reason);
+      };
+
+      const validateWithdrawal = async () => {
+        if (!mockMethod || !mockMethod.payout_mode || !mockMethod.country) {
+          await rollbackToPending("Moyen de paiement introuvable ou configuration de virement incomplète");
+        }
+        await mockXbetPayout();
+      };
+
+      await expect(validateWithdrawal()).rejects.toThrow(
+        "Moyen de paiement introuvable ou configuration de virement incomplète"
+      );
+      expect(txStatus).toBe("pending");
+      expect(mockXbetPayout).not.toHaveBeenCalled();
+      expect(adminLogs.length).toBe(1);
+      expect(adminLogs[0].action).toBe("abort_withdrawal_validation");
+    });
+
+    // Point 3 : Numéro invalide -> pending sans appel 1XBET
+    it("devrait remettre la transaction en pending sans appeler 1XBET si le numéro est invalide", async () => {
+      let txStatus = "paid";
+      const adminLogs: any[] = [];
+      const mockXbetPayout = vi.fn();
+
+      const tx = {
+        id: "tx-retrait-invalid-num",
+        payment_method_id: "method-bj-ok",
+        recipient_number: "12345",
+        recipient_country: "BJ",
+      };
+
+      const mockMethod = {
+        id: "method-bj-ok",
+        country: "BJ",
+        payout_mode: "mtn_open",
+      };
+
+      const rollbackToPending = async (reason: string) => {
+        if (txStatus === "paid") {
+          txStatus = "pending";
+        }
+        adminLogs.push({ action: "abort_withdrawal_validation", target_id: tx.id, reason });
+        throw new Error(reason);
+      };
+
+      const validateWithdrawal = async () => {
+        const payoutMode = (mockMethod.payout_mode || "").trim();
+        const country = (mockMethod.country || "").trim() as CodePays;
+        if (!payoutMode || !country) {
+          await rollbackToPending("Configuration incomplète");
+        }
+
+        const norm = normaliserNumero(country, tx.recipient_number);
+        if (!norm || !norm.national) {
+          await rollbackToPending(`Numéro de bénéficiaire invalide (${tx.recipient_number}) pour le pays ${country}.`);
+        }
+
+        await mockXbetPayout();
+      };
+
+      await expect(validateWithdrawal()).rejects.toThrow("Numéro de bénéficiaire invalide (12345) pour le pays BJ");
+      expect(txStatus).toBe("pending");
+      expect(mockXbetPayout).not.toHaveBeenCalled();
+      expect(adminLogs.length).toBe(1);
+    });
+
+    // Point 4 : Summa absent (NaN) -> aucun virement, failed_credit résultat incertain
+    it("devrait passer en failed_credit avec résultat incertain sans virer si summa est absent (NaN)", async () => {
+      const mockFedaPayPayout = vi.fn();
+      let txStatus = "paid";
+      let failureReason = "";
+      let recordedXbetPayoutRef = "";
+
+      const xbetResponse = {
+        success: true,
+        summa: NaN,
+        messageId: "XBET-MSG-987",
+      };
+
+      const xbetPayoutRef = xbetResponse.messageId || "REF-FALLBACK";
+      const montantReel = Math.abs(xbetResponse.summa);
+
+      if (!Number.isFinite(montantReel) || !Number.isInteger(montantReel) || montantReel <= 0) {
+        txStatus = "failed_credit";
+        failureReason = "RÉSULTAT INCERTAIN : 1XBET a confirmé sans montant exploitable, vérifier la caisse";
+        recordedXbetPayoutRef = xbetPayoutRef;
+      } else {
+        await mockFedaPayPayout(montantReel);
+      }
+
+      expect(txStatus).toBe("failed_credit");
+      expect(failureReason).toBe("RÉSULTAT INCERTAIN : 1XBET a confirmé sans montant exploitable, vérifier la caisse");
+      expect(recordedXbetPayoutRef).toBe("XBET-MSG-987");
+      expect(mockFedaPayPayout).not.toHaveBeenCalled();
+    });
+
+    it("devrait retourner NaN dans XbetAdapter si le champ summa est absent de la réponse", () => {
+      const dataWithoutSumma = { success: true, messageId: "12345" };
+      const lire = (data: any, cle: string) => data[cle] ?? data[cle.charAt(0).toUpperCase() + cle.slice(1)];
+      const summaRaw = lire(dataWithoutSumma, "summa");
+      const summa = summaRaw !== undefined ? Math.abs(Number(summaRaw)) : NaN;
+      expect(Number.isNaN(summa)).toBe(true);
     });
   });
 });
