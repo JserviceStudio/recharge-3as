@@ -242,7 +242,7 @@ export class XbetAdapter {
     // Succès confirmé
     if (httpStatus >= 200 && httpStatus < 300 && lire(data, "success") === true) {
       const summaRaw = lire(data, "summa");
-      const summa = summaRaw !== undefined ? Math.abs(Number(summaRaw)) : 0;
+      const summa = summaRaw !== undefined ? Math.abs(Number(summaRaw)) : NaN;
       const messageId = lire(data, "messageId");
       return { success: true, summa, messageId, rawResponse: data };
     }

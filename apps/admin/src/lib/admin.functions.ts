@@ -151,12 +151,32 @@ export const validateTransaction = createServerFn({ method: "POST" })
     }
 
     // Étape 3 : Montant à virer = Math.abs(Summa) (ce que la caisse a réellement reçu)
+    const xbetPayoutRef = xbetRes.messageId ? String(xbetRes.messageId) : `XBET-PAYOUT-${Date.now()}`;
     const montantReel = Math.abs(xbetRes.summa);
+
+    if (!Number.isFinite(montantReel) || !Number.isInteger(montantReel) || montantReel <= 0) {
+      const raisonIncertaine = "RÉSULTAT INCERTAIN : 1XBET a confirmé sans montant exploitable, vérifier la caisse";
+      await supabaseAdmin.from("transactions").update({
+        status: "failed_credit",
+        failure_reason: raisonIncertaine,
+        xbet_payout_ref: xbetPayoutRef,
+        updated_at: new Date().toISOString(),
+      }).eq("id", tx.id);
+
+      await supabaseAdmin.from("admin_logs").insert({
+        admin_id: context.userId,
+        action: "uncertain_1xbet_payout_invalid_summa",
+        target_id: tx.id,
+        details: { reason: raisonIncertaine, summa: xbetRes.summa, xbet_payout_ref: xbetPayoutRef },
+      });
+
+      throw new Error(raisonIncertaine);
+    }
+
     let discrepancyNote: string | null = null;
     if (montantReel !== Number(tx.amount)) {
       discrepancyNote = `Écart montant : déclaré ${tx.amount} FCFA, réel reçu 1XBET ${montantReel} FCFA. Virement du montant réel.`;
     }
-    const xbetPayoutRef = xbetRes.messageId ? String(xbetRes.messageId) : `XBET-PAYOUT-${Date.now()}`;
 
     // Étape 4 : Virement FedaPay : FedaPayAdapter.createPayout(montant, numéroNational, txId, payout_mode, pays)
     const { FedaPayAdapter } = await import("@/server/adapters/FedaPayAdapter");
