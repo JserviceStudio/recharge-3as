@@ -153,7 +153,7 @@ export const getWithdrawalContext = createServerFn({ method: "GET" })
     };
   });
 
-const submitWithdrawalSchema = z.object({
+export const submitWithdrawalSchema = z.object({
   idempotency_key: z.string().uuid("Clé d'idempotence invalide"),
   city: z.string().trim().min(1, "La ville est obligatoire").max(100),
   district: z.string().trim().min(1, "Le quartier ou la rue est obligatoire").max(150),
@@ -169,7 +169,16 @@ const submitWithdrawalSchema = z.object({
 
 export const submitWithdrawal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: z.infer<typeof submitWithdrawalSchema>) => data)
+  .inputValidator((data: unknown) => {
+    try {
+      return submitWithdrawalSchema.parse(data);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        throw new Error(err.issues[0]?.message || "Données invalides");
+      }
+      throw err;
+    }
+  })
   .handler(async ({ data, context }) => {
     loadServerEnv();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
