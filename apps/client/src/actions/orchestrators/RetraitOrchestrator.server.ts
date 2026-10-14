@@ -184,11 +184,12 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { whatsapp, appUrl } = await getAppSettings(supabaseAdmin);
 
-    // 1. Idempotence : si la clé a déjà été soumise, renvoyer la demande existante
+    // 1. Idempotence : si la clé a déjà été soumise par ce client, renvoyer sa demande existante
     const { data: existingTx } = await supabaseAdmin
       .from("transactions")
       .select("*")
       .eq("idempotency_key", data.idempotency_key)
+      .eq("user_id", context.userId)
       .maybeSingle();
 
     if (existingTx) {
@@ -353,6 +354,7 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
             .from("transactions")
             .select("*")
             .eq("idempotency_key", data.idempotency_key)
+            .eq("user_id", context.userId)
             .maybeSingle();
           if (existing) {
             return { success: true, transaction: existing, adminWhatsapp: whatsapp, appUrl };
