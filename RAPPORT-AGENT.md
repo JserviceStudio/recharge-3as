@@ -171,3 +171,71 @@ ON CONFLICT (key) DO NOTHING;
    La vérification préalable du compte joueur s'assure que la devise du compte correspond à celle de la caisse (valeur par défaut : `27` = XOF). S'assurer que la variable d'environnement `XBET_CURRENCY_ID=27` est bien présente en production.
 3. **Plages de plafonds journaliers** :
    Le plafond par défaut est positionné à `2 000 000 FCFA` par jour (réinitialisé à minuit heure du Bénin UTC+1). Si besoin, cette valeur peut être modifiée à tout moment dans `app_settings` (`withdrawal_daily_limit`).
+
+---
+
+## 6. Relecture 1
+
+### A. Commits Réalisés
+Chaque point de `CORRECTIONS-1.md` a fait l'objet d'un commit atomique dédié en français, signé avec `Co-Authored-By: Gemini <noreply@google.com>` :
+
+1. **`5e131d6`** : `fix(client): validation stricte du schema de retrait cote serveur`
+   - Application de `submitWithdrawalSchema.parse(data)` dans le `inputValidator` de `submitWithdrawal`.
+   - Extraction et renvoi immédiat du premier message d'erreur Zod clair en lieu et place d'une trace d'erreur brute.
+
+2. **`01fc140`** : `fix(client): filtrage de l'idempotence par utilisateur pour eviter les fuites tiers`
+   - Ajout systématique du filtre `.eq("user_id", context.userId)` lors de la consultation par `idempotency_key` au début du handler ainsi que dans la branche d'erreur de conflit d'unicité (code 23505).
+   - Une clé d'idempotence provenant d'un tiers ne renvoie aucune transaction existante.
+
+3. **`49a51eb`** : `fix(admin): controles stricts du moyen de paiement et numero avant encaissement 1xbet`
+   - Contrôles stricts avant tout appel à `XbetAdapter.payout` : moyen de paiement présent en base avec `payout_mode` et `country` non vides (suppression définitive du repli par défaut `mtn_open`).
+   - Normalisation stricte du numéro via `normaliserNumero` avec rejet immédiat si invalide (suppression du repli sur les chiffres bruts).
+   - En cas d'échec de validation : remise de la transaction à l'état `pending` (`UPDATE status='pending' WHERE id=... AND status='paid'`), consignation dans `admin_logs` (`abort_withdrawal_validation`) et levée d'une erreur claire sans toucher au code 1XBET.
+
+4. **`ec3f45e`** : `fix(admin): blocage du virement fedapay si le montant recu 1xbet n'est pas exploitable`
+   - Mise à jour de `XbetAdapter.payout` (côté admin et client) pour renvoyer `NaN` (et non `0`) si la clé `summa` est absente de la réponse 1XBET.
+   - Blocage strict du virement FedaPay si `montantReel` n'est pas un entier strictement positif (`Number.isFinite`, `Number.isInteger`, `> 0`).
+   - Transition en `failed_credit` avec libellé explicite « RÉSULTAT INCERTAIN : 1XBET a confirmé sans montant exploitable, vérifier la caisse » et enregistrement de `xbet_payout_ref`.
+
+5. **`2487759`** : `test(retrait): tests de non-regression pour les corrections 1 a 4`
+   - Ajout des tests de non-régression dans `tests/retrait.test.ts` couvrant l'ensemble des 4 points de correction.
+
+### B. Commandes Lancées et Résultats Réels
+
+1. **Suite de tests unitaires et intégration** :
+   ```bash
+   export PATH="/root/.bun/bin:$PATH" && bun test tests/retrait.test.ts
+   ```
+   **Résultat réel :**
+   ```text
+   bun test v1.4.2 (744846f84)
+
+    21 pass
+    0 fail
+    61 expect() calls
+   Ran 21 tests across 1 file. [2.99s]
+   ```
+   Les 21 tests (les 15 initiaux + les 6 nouveaux tests de la Relecture 1) passent tous avec succès.
+
+2. **Build de production Client (`apps/client`)** :
+   ```bash
+   cd apps/client && bun run build
+   ```
+   **Résultat réel :**
+   ```text
+   ✓ built in 1m 55s
+   code de sortie : 0
+   0 erreur TypeScript, Vite ou Nitro.
+   ```
+
+3. **Build de production Admin (`apps/admin`)** :
+   ```bash
+   cd apps/admin && bun run build
+   ```
+   **Résultat réel :**
+   ```text
+   ✓ built in 2m 23s
+   code de sortie : 0
+   0 erreur TypeScript, Vite ou Nitro.
+   ```
+
