@@ -1,9 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { loadServerEnv } from "../../server-env";
+// server-env et XbetAdapter sont importés DANS les handlers : en tête de fichier, ils partaient
+// dans le bundle navigateur (« Missing Supabase environment variable(s) », 14/10).
 import { CodePays, PAYS, normaliserNumero } from "@/lib/mobile-money";
-import { XbetAdapter } from "../adapters/XbetAdapter";
 
 /**
  * Récupère les paramètres de l'application (WhatsApp, URL du site) depuis app_settings
@@ -65,6 +65,7 @@ function getBeninDayStartIso(): string {
 export const getWithdrawalContext = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { loadServerEnv } = await import("../../server-env");
     loadServerEnv();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -180,6 +181,7 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
     }
   })
   .handler(async ({ data, context }) => {
+    const { loadServerEnv } = await import("../../server-env");
     loadServerEnv();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { whatsapp, appUrl } = await getAppSettings(supabaseAdmin);
@@ -284,6 +286,7 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
 
     // 7. Vérification du compte 1XBET via XbetAdapter
     if (selectedApp.code.toLowerCase() === "1xbet") {
+      const { XbetAdapter } = await import("../adapters/XbetAdapter");
       const isValidAccount = await XbetAdapter.verifyAccount(data.id_1xbet);
       if (!isValidAccount) {
         if (XbetAdapter.derniereRaison === "CURRENCY_MISMATCH") {
