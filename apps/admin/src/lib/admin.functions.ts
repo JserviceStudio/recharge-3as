@@ -56,25 +56,57 @@ export const validateTransaction = createServerFn({ method: "POST" })
     }
 
     // Traitement pour un RETRAIT (withdrawal)
-    // 1. Détermination du mode de virement et pays depuis payment_methods
-    let payoutMode = "mtn_open";
-    let country: import("./mobile-money").CodePays = (tx.recipient_country as any) || "BJ";
+    // Contrôles stricts AVANT encaissement 1XBET : moyen de paiement valide et numéro normalisable.
+    // En cas d'échec : remise immédiate en pending, journalisation admin_logs, erreur levée (aucun appel 1XBET).
+    const rollbackToPending = async (reason: string) => {
+      await supabaseAdmin
+        .from("transactions")
+        .update({
+          status: "pending",
+          validated_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", tx.id)
+        .eq("status", "paid");
 
-    if (tx.payment_method_id) {
-      const { data: method } = await supabaseAdmin
-        .from("payment_methods")
-        .select("payout_mode, country")
-        .eq("id", tx.payment_method_id)
-        .maybeSingle();
+      await supabaseAdmin.from("admin_logs").insert({
+        admin_id: context.userId,
+        action: "abort_withdrawal_validation",
+        target_id: tx.id,
+        details: { reason },
+      });
 
-      if (method?.payout_mode) payoutMode = method.payout_mode;
-      if (method?.country) country = method.country as any;
+      throw new Error(reason);
+    };
+
+    if (!tx.payment_method_id) {
+      await rollbackToPending("Moyen de paiement non spécifié pour ce retrait.");
     }
 
-    // Normalisation du numéro pour FedaPay
+    const { data: method, error: methodErr } = await supabaseAdmin
+      .from("payment_methods")
+      .select("payout_mode, country")
+      .eq("id", tx.payment_method_id)
+      .maybeSingle();
+
+    if (methodErr || !method || !method.payout_mode || !method.country) {
+      await rollbackToPending("Moyen de paiement introuvable ou configuration de virement incomplète (payout_mode ou country manquant).");
+    }
+
+    const payoutMode = (method.payout_mode || "").trim();
+    const country = (method.country || "").trim() as import("./mobile-money").CodePays;
+
+    if (!payoutMode || !country) {
+      await rollbackToPending("Configuration de virement incomplète pour ce moyen de paiement.");
+    }
+
+    // Normalisation stricte du numéro pour FedaPay (aucun repli sur les chiffres bruts)
     const { normaliserNumero } = await import("./mobile-money");
     const norm = normaliserNumero(country, tx.recipient_number || "");
-    const nationalPhone = norm ? norm.national : (tx.recipient_number || "").replace(/\D/g, "");
+    if (!norm || !norm.national) {
+      await rollbackToPending(`Numéro de bénéficiaire invalide (${tx.recipient_number}) pour le pays ${country}.`);
+    }
+    const nationalPhone = norm.national;
 
     // Étape 2 : Encaissement du code chez 1XBET (une seule tentative, timeout 30 s)
     const { XbetAdapter } = await import("@/server/adapters/XbetAdapter");
