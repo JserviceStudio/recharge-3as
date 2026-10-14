@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       admin_logs: {
         Row: {
           action: string
@@ -127,27 +154,33 @@ export type Database = {
         Row: {
           active: boolean
           agent_number: string
+          country: string
           created_at: string
           id: string
           name: string
+          payout_mode: string | null
           provider: Database["public"]["Enums"]["payment_provider"]
           updated_at: string
         }
         Insert: {
           active?: boolean
           agent_number: string
+          country?: string
           created_at?: string
           id?: string
           name: string
+          payout_mode?: string | null
           provider: Database["public"]["Enums"]["payment_provider"]
           updated_at?: string
         }
         Update: {
           active?: boolean
           agent_number?: string
+          country?: string
           created_at?: string
           id?: string
           name?: string
+          payout_mode?: string | null
           provider?: Database["public"]["Enums"]["payment_provider"]
           updated_at?: string
         }
@@ -155,45 +188,58 @@ export type Database = {
       }
       profiles: {
         Row: {
+          city: string | null
           created_at: string
+          district: string | null
           full_name: string
           id: string
-          phone: string
           is_verified: boolean
+          phone: string
           updated_at: string
+          verified_by_tx_id: string | null
         }
         Insert: {
+          city?: string | null
           created_at?: string
+          district?: string | null
           full_name: string
           id: string
-          phone: string
           is_verified?: boolean
+          phone: string
           updated_at?: string
+          verified_by_tx_id?: string | null
         }
         Update: {
+          city?: string | null
           created_at?: string
+          district?: string | null
           full_name?: string
           id?: string
-          phone?: string
           is_verified?: boolean
+          phone?: string
           updated_at?: string
+          verified_by_tx_id?: string | null
         }
         Relationships: []
       }
       transactions: {
         Row: {
           amount: number
+          app_code: string | null
           created_at: string
           credit_attempts: number | null
           credited_at: string | null
           failure_reason: string | null
           id: string
           id_1xbet: string
+          idempotency_key: string | null
           payment_method_id: string | null
           payment_method_label: string
           proof_url: string | null
           provider_ref: string | null
           provider_status: string | null
+          recipient_country: string | null
+          recipient_name: string | null
           recipient_number: string | null
           rejection_reason: string | null
           status: Database["public"]["Enums"]["tx_status"]
@@ -204,20 +250,25 @@ export type Database = {
           validated_at: string | null
           validated_by: string | null
           xbet_credit_ref: string | null
+          xbet_payout_ref: string | null
         }
         Insert: {
           amount: number
+          app_code?: string | null
           created_at?: string
           credit_attempts?: number | null
           credited_at?: string | null
           failure_reason?: string | null
           id?: string
           id_1xbet: string
+          idempotency_key?: string | null
           payment_method_id?: string | null
           payment_method_label: string
           proof_url?: string | null
           provider_ref?: string | null
           provider_status?: string | null
+          recipient_country?: string | null
+          recipient_name?: string | null
           recipient_number?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["tx_status"]
@@ -228,20 +279,25 @@ export type Database = {
           validated_at?: string | null
           validated_by?: string | null
           xbet_credit_ref?: string | null
+          xbet_payout_ref?: string | null
         }
         Update: {
           amount?: number
+          app_code?: string | null
           created_at?: string
           credit_attempts?: number | null
           credited_at?: string | null
           failure_reason?: string | null
           id?: string
           id_1xbet?: string
+          idempotency_key?: string | null
           payment_method_id?: string | null
           payment_method_label?: string
           proof_url?: string | null
           provider_ref?: string | null
           provider_status?: string | null
+          recipient_country?: string | null
+          recipient_name?: string | null
           recipient_number?: string | null
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["tx_status"]
@@ -252,6 +308,7 @@ export type Database = {
           validated_at?: string | null
           validated_by?: string | null
           xbet_credit_ref?: string | null
+          xbet_payout_ref?: string | null
         }
         Relationships: [
           {
