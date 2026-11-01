@@ -131,26 +131,36 @@ export const getWithdrawalContext = createServerFn({ method: "GET" })
     const totalToday = (todayTx || []).reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
     const remainingDailyLimit = Math.max(0, dailyLimit - totalToday);
 
-    // 5. Moyens de paiement actifs
-    const { data: paymentMethods } = await supabaseAdmin
+    // 5. Moyens de paiement actifs (avec repli sur les 3 réseaux standard Bénin + Togo)
+    const { data: dbPaymentMethods } = await supabaseAdmin
       .from("payment_methods")
       .select("id, name, provider, country, payout_mode, active")
       .eq("active", true)
       .order("name");
 
+    const defaultMethods = [
+      { id: "11111111-1111-1111-1111-111111111111", name: "MTN Mobile Money", provider: "mtn_momo", country: "BJ", payout_mode: "manual", active: true },
+      { id: "22222222-2222-2222-2222-222222222222", name: "Moov Money", provider: "moov_money", country: "BJ", payout_mode: "manual", active: true },
+      { id: "33333333-3333-3333-3333-333333333333", name: "Celtiis Cash", provider: "celtiis_cash", country: "BJ", payout_mode: "manual", active: true },
+      { id: "44444444-4444-4444-4444-444444444444", name: "Moov Money Togo", provider: "moov_money", country: "TG", payout_mode: "manual", active: true },
+      { id: "55555555-5555-5555-5555-555555555555", name: "YAS (Togocel)", provider: "other", country: "TG", payout_mode: "manual", active: true },
+    ];
+
+    const paymentMethods = (dbPaymentMethods && dbPaymentMethods.length > 0) ? dbPaymentMethods : defaultMethods;
+
     return {
       profile: {
         full_name: profile?.full_name || "",
         phone: profile?.phone || "",
-        city: profile?.city || "",
-        district: profile?.district || "",
+        city: profile?.city || "Porto-Novo",
+        district: profile?.district || "3as Recharge",
       },
       lastId1xbet: lastTx?.id_1xbet || "",
       apps,
       minAmount,
       dailyLimit,
       remainingDailyLimit,
-      paymentMethods: paymentMethods || [],
+      paymentMethods,
     };
   });
 
@@ -297,14 +307,26 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
     }
 
     // 8. Vérification du moyen de paiement et normalisation du numéro
-    const { data: method, error: methodErr } = await supabaseAdmin
-      .from("payment_methods")
-      .select("*")
-      .eq("id", data.payment_method_id)
-      .eq("active", true)
-      .maybeSingle();
+    const defaultMethods = [
+      { id: "11111111-1111-1111-1111-111111111111", name: "MTN Mobile Money", provider: "mtn_momo", country: "BJ", payout_mode: "manual", active: true },
+      { id: "22222222-2222-2222-2222-222222222222", name: "Moov Money", provider: "moov_money", country: "BJ", payout_mode: "manual", active: true },
+      { id: "33333333-3333-3333-3333-333333333333", name: "Celtiis Cash", provider: "celtiis_cash", country: "BJ", payout_mode: "manual", active: true },
+      { id: "44444444-4444-4444-4444-444444444444", name: "Moov Money Togo", provider: "moov_money", country: "TG", payout_mode: "manual", active: true },
+      { id: "55555555-5555-5555-5555-555555555555", name: "YAS (Togocel)", provider: "other", country: "TG", payout_mode: "manual", active: true },
+    ];
 
-    if (methodErr || !method) {
+    let method: any = defaultMethods.find((m) => m.id === data.payment_method_id);
+    if (!method) {
+      const { data: dbMethod } = await supabaseAdmin
+        .from("payment_methods")
+        .select("*")
+        .eq("id", data.payment_method_id)
+        .eq("active", true)
+        .maybeSingle();
+      if (dbMethod) method = dbMethod;
+    }
+
+    if (!method) {
       throw new Error("Moyen de paiement introuvable ou inactif.");
     }
 

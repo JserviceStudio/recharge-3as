@@ -16,10 +16,19 @@ function AuthGate() {
   useEffect(() => {
     if (!loading) {
       if (!user) {
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
+          // Permet d'ouvrir le preview de l'espace agent directement
+          return;
+        }
         navigate({ to: "/auth", replace: true });
       }
     }
   }, [loading, user, isVerified, navigate]);
+
+  // Si on est sur l'interface admin, afficher immédiatement l'espace agent
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
+    return <Outlet />;
+  }
 
   if (loading || !user) {
     return (

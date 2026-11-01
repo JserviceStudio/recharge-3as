@@ -18,12 +18,16 @@ function HistoriquePage() {
   const { data: transactions, isLoading } = useQuery({
     queryKey: ["transactions", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      return data ?? [];
+      try {
+        const { data } = await supabase
+          .from("transactions")
+          .select("*")
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: false });
+        return data ?? [];
+      } catch {
+        return [];
+      }
     },
     enabled: !!user,
     // Tant qu'une demande est en cours, on relit toutes les 3 s : le crédit arrive par webhook

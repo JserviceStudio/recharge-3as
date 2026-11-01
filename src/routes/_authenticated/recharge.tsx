@@ -52,9 +52,9 @@ function RechargePage() {
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
-      id_1xbet: "",
-      amount: Number(localStorage.getItem("last_amount") ?? "100") || 100,
-      phone: user?.user_metadata?.phone || user?.phone || "",
+      id_1xbet: (user?.user_metadata?.id_1xbet as string) || "",
+      amount: Number(localStorage.getItem("last_amount") ?? "5000") || 5000,
+      phone: user?.user_metadata?.phone || user?.phone || "+229 97 00 00 00",
       country: "BJ",
       network: "mtn_bj",
     },

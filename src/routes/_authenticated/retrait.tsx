@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState, useEffect } from "react";
-import { Loader2, Info, CheckCircle2, ArrowRight } from "lucide-react";
+import { Loader2, Info, CheckCircle2, ArrowRight, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -65,8 +65,8 @@ function RetraitPage() {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      city: "",
-      district: "",
+      city: "Porto-Novo",
+      district: "3as Recharge",
       app_code: "1xbet",
       id_1xbet: "",
       tx_id: "",
@@ -82,8 +82,8 @@ function RetraitPage() {
   useEffect(() => {
     if (!context) return;
 
-    if (context.profile.city) form.setValue("city", context.profile.city);
-    if (context.profile.district) form.setValue("district", context.profile.district);
+    form.setValue("city", context.profile.city || "Porto-Novo");
+    form.setValue("district", context.profile.district || "3as Recharge");
     if (context.profile.full_name) form.setValue("recipient_name", context.profile.full_name);
     if (context.lastId1xbet) form.setValue("id_1xbet", context.lastId1xbet);
     if (context.minAmount) form.setValue("amount", context.minAmount);
@@ -101,9 +101,16 @@ function RetraitPage() {
     if (context.profile.phone) form.setValue("recipient_number", context.profile.phone);
   }, [context, form]);
 
+  const BENIN_DEFAULT_METHODS = [
+    { id: "11111111-1111-1111-1111-111111111111", name: "MTN Mobile Money", country: "BJ" },
+    { id: "22222222-2222-2222-2222-222222222222", name: "Moov Money", country: "BJ" },
+    { id: "33333333-3333-3333-3333-333333333333", name: "Celtiis Cash", country: "BJ" },
+  ];
+
   const selectedCountry = form.watch("recipient_country") as CodePays;
-  const methodsForCountry = context?.paymentMethods.filter((m) => m.country === selectedCountry) ?? [];
-  const activeCountries = Array.from(new Set(context?.paymentMethods.map((m) => m.country as CodePays) ?? ["BJ"]));
+  const methodsFromContext = context?.paymentMethods?.filter((m) => m.country === selectedCountry) ?? [];
+  const methodsForCountry = methodsFromContext.length > 0 ? methodsFromContext : (selectedCountry === "BJ" ? BENIN_DEFAULT_METHODS : []);
+  const activeCountries = Array.from(new Set(context?.paymentMethods?.map((m) => m.country as CodePays) ?? ["BJ", "TG"]));
 
   // Validation intermédiaire avant affichage du modal de confirmation récapitulative
   const onValidateForm = (values: FormValues) => {
@@ -195,7 +202,16 @@ ${adminLink}
     }
   };
 
-  const selectedMethod = context?.paymentMethods.find((m) => m.id === pendingValues?.payment_method_id);
+  const ALL_FALLBACK_METHODS = [
+    { id: "11111111-1111-1111-1111-111111111111", name: "MTN Mobile Money", country: "BJ" },
+    { id: "22222222-2222-2222-2222-222222222222", name: "Moov Money", country: "BJ" },
+    { id: "33333333-3333-3333-3333-333333333333", name: "Celtiis Cash", country: "BJ" },
+    { id: "44444444-4444-4444-4444-444444444444", name: "Moov Money Togo", country: "TG" },
+    { id: "55555555-5555-5555-5555-555555555555", name: "YAS (Togocel)", country: "TG" },
+  ];
+
+  const selectedMethod = context?.paymentMethods.find((m) => m.id === pendingValues?.payment_method_id) ||
+    ALL_FALLBACK_METHODS.find((m) => m.id === pendingValues?.payment_method_id);
   const selectedAppName = context?.apps.find((a) => a.code === pendingValues?.app_code)?.name || pendingValues?.app_code;
 
   return (
@@ -209,7 +225,7 @@ ${adminLink}
             Comment ça marche
           </div>
           <p className="text-xs text-muted-foreground">
-            1. Générez un code de retrait dans votre application (caisse 3AS).
+            1. Générez un code de retrait dans votre application 1xbet.
             <br />
             2. Renseignez vos coordonnées de réception et le code.
             <br />
@@ -217,6 +233,22 @@ ${adminLink}
           </p>
         </CardContent>
       </Card>
+
+      {/* Adresse de retrait obligatoire à confirmer */}
+      <div className="p-3.5 bg-blue-500/10 border border-blue-500/25 rounded-2xl space-y-1.5 text-xs shadow-sm">
+        <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300 tracking-wide uppercase">
+          <MapPin className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <span>*VEUILLEZ CONFIRMER L'ADRESSE DU RETRAIT</span>
+        </div>
+        <div className="pl-5 space-y-1 text-slate-700 dark:text-slate-200">
+          <div>
+            Ville : <span className="text-blue-600 dark:text-blue-400 font-bold font-medium-lg">Porto-Novo</span>
+          </div>
+          <div>
+            Rue : <span className="text-blue-600 dark:text-blue-400 font-bold font-medium-lg">3as Recharge</span>
+          </div>
+        </div>
+      </div>
 
       {context && (
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -252,37 +284,18 @@ ${adminLink}
         <form onSubmit={form.handleSubmit(onValidateForm)} className="space-y-4">
           <Card className="shadow-card">
             <CardContent className="p-4 space-y-4">
-              {/* 1. Adresse : Ville et Quartier / Rue */}
-              <div className="space-y-3 pb-2 border-b">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  1. Votre adresse (KYC)
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Ville" error={form.formState.errors.city?.message}>
-                    <Input placeholder="Ex: Cotonou" {...form.register("city")} />
-                  </Field>
-                  <Field label="Rue / Quartier" error={form.formState.errors.district?.message}>
-                    <Input placeholder="Ex: Cadjèhoun" {...form.register("district")} />
-                  </Field>
-                </div>
-              </div>
-
-              {/* 2. Application */}
+              {/* Application de paris avec 1xbet mis dans la case */}
               <Field label="Application de paris" error={form.formState.errors.app_code?.message}>
-                <Select
-                  value={form.watch("app_code")}
-                  onValueChange={(v) => form.setValue("app_code", v, { shouldValidate: true })}
-                >
-                  <SelectTrigger><SelectValue placeholder="Choisir l'application" /></SelectTrigger>
-                  <SelectContent>
-                    {context?.apps.map((a) => (
-                      <SelectItem key={a.code} value={a.code}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value="1xbet"
+                  readOnly
+                  disabled
+                  className="bg-muted font-bold text-foreground cursor-not-allowed opacity-90"
+                  {...form.register("app_code")}
+                />
               </Field>
 
-              {/* 3. User ID */}
+              {/* ID Joueur */}
               <Field label="ID Joueur (chiffres uniquement)" error={form.formState.errors.id_1xbet?.message}>
                 <Input
                   inputMode="numeric"
@@ -291,7 +304,7 @@ ${adminLink}
                 />
               </Field>
 
-              {/* 4. Code de retrait */}
+              {/* Code de retrait */}
               <Field label="Code de retrait" error={form.formState.errors.tx_id?.message}>
                 <Input
                   placeholder="Code alphanumérique reçu"
@@ -300,28 +313,32 @@ ${adminLink}
                 />
               </Field>
 
-              {/* 5. Montant */}
-              <Field label="Montant à retirer (FCFA)" error={form.formState.errors.amount?.message}>
+              {/* Montant avec Minimum 900f */}
+              <Field label="Montant à retirer (Minimum 900f)" error={form.formState.errors.amount?.message}>
                 <Input
                   type="number"
                   inputMode="numeric"
-                  placeholder="Ex: 5000"
+                  placeholder="Ex: 900"
+                  min={900}
                   {...form.register("amount")}
                 />
               </Field>
 
-              {/* 6. Nom et prénoms Mobile Money */}
+              {/* Nom et prénoms Mobile Money */}
               <Field label="Nom et prénoms sur le compte Mobile Money" error={form.formState.errors.recipient_name?.message}>
                 <Input placeholder="Ex: Jean DUPONT" {...form.register("recipient_name")} />
               </Field>
 
-              {/* 7. Pays (seuls les pays ayant un moyen actif) */}
+              {/* Pays de réception */}
               <Field label="Pays de réception">
                 <Select
                   value={selectedCountry}
                   onValueChange={(v: CodePays) => {
                     form.setValue("recipient_country", v, { shouldValidate: true });
-                    const firstInCountry = context?.paymentMethods.find((m) => m.country === v);
+                    const firstInCountry = (context?.paymentMethods || [
+                      { id: "11111111-1111-1111-1111-111111111111", country: "BJ" },
+                      { id: "44444444-4444-4444-4444-444444444444", country: "TG" },
+                    ]).find((m) => m.country === v);
                     if (firstInCountry) form.setValue("payment_method_id", firstInCountry.id, { shouldValidate: true });
                   }}
                 >
@@ -329,14 +346,14 @@ ${adminLink}
                   <SelectContent>
                     {activeCountries.map((c) => (
                       <SelectItem key={c} value={c}>
-                        {PAYS[c]?.nom || c} (+{PAYS[c]?.indicatif})
+                        {PAYS[c as CodePays]?.nom || c} (+{PAYS[c as CodePays]?.indicatif})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
 
-              {/* 8. Numéro de réception */}
+              {/* Numéro de réception */}
               <Field
                 label={`Numéro de réception (${PAYS[selectedCountry]?.nom})`}
                 error={form.formState.errors.recipient_number?.message}
@@ -354,16 +371,28 @@ ${adminLink}
                 </div>
               </Field>
 
-              {/* 9. Moyen de paiement filtré par pays */}
+              {/* Moyen de paiement Mobile Money avec les 3 réseaux affichés au clic */}
               <Field label="Moyen de paiement Mobile Money" error={form.formState.errors.payment_method_id?.message}>
                 <Select
                   value={form.watch("payment_method_id")}
                   onValueChange={(v) => form.setValue("payment_method_id", v, { shouldValidate: true })}
                 >
-                  <SelectTrigger><SelectValue placeholder="Choisir un opérateur" /></SelectTrigger>
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Choisir votre réseau Mobile Money" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {methodsForCountry.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    {/* Les 3 réseaux Mobile Money principaux (MTN, Moov, Celtiis) */}
+                    {(methodsForCountry.length > 0 ? methodsForCountry : [
+                      { id: "11111111-1111-1111-1111-111111111111", name: "MTN Mobile Money", country: "BJ" },
+                      { id: "22222222-2222-2222-2222-222222222222", name: "Moov Money", country: "BJ" },
+                      { id: "33333333-3333-3333-3333-333333333333", name: "Celtiis Cash", country: "BJ" },
+                    ]).map((m) => (
+                      <SelectItem key={m.id} value={m.id} className="cursor-pointer font-medium py-2.5">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-primary" />
+                          {m.name}
+                        </span>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -376,7 +405,7 @@ ${adminLink}
             className="w-full h-12 bg-gradient-brand font-semibold cursor-pointer"
             disabled={submitting || isVerified === false}
           >
-            Vérifier la demande <ArrowRight className="h-4 w-4 ml-2" />
+            Valider la demande <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </form>
       )}
@@ -436,7 +465,7 @@ ${adminLink}
               </div>
 
               <p className="text-xs text-muted-foreground text-center">
-                Après confirmation, notre équipe vérifiera votre code de retrait auprès de la caisse pour transférer immédiatement vos fonds.
+                Après confirmation, notre équipe vérifiera votre code de retrait auprès de 1xbet pour transférer immédiatement vos fonds.
               </p>
             </div>
           )}
