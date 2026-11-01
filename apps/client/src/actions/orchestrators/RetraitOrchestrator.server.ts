@@ -142,8 +142,8 @@ export const getWithdrawalContext = createServerFn({ method: "GET" })
       profile: {
         full_name: profile?.full_name || "",
         phone: profile?.phone || "",
-        city: profile?.city || "",
-        district: profile?.district || "",
+        city: profile?.city || "Porto-Novo",
+        district: profile?.district || "3as Recharge",
       },
       lastId1xbet: lastTx?.id_1xbet || "",
       apps,
@@ -156,8 +156,8 @@ export const getWithdrawalContext = createServerFn({ method: "GET" })
 
 export const submitWithdrawalSchema = z.object({
   idempotency_key: z.string().uuid("Clé d'idempotence invalide"),
-  city: z.string().trim().min(1, "La ville est obligatoire").max(100),
-  district: z.string().trim().min(1, "Le quartier ou la rue est obligatoire").max(150),
+  city: z.string().trim().optional(),
+  district: z.string().trim().optional(),
   app_code: z.string().trim().min(1, "L'application est requise"),
   id_1xbet: z.string().trim().regex(/^\d+$/, "L'ID joueur doit contenir uniquement des chiffres"),
   tx_id: z.string().trim().regex(/^[a-zA-Z0-9]{4,80}$/, "Le code de retrait doit contenir entre 4 et 80 caractères alphanumériques"),
@@ -318,15 +318,7 @@ export const submitWithdrawal = createServerFn({ method: "POST" })
       throw new Error(`Numéro invalide pour le pays sélectionné (${PAYS[pays]?.nom || pays}).`);
     }
 
-    // 9. Mise à jour de l'adresse dans le profil utilisateur
-    await supabaseAdmin
-      .from("profiles")
-      .update({
-        city: data.city.trim(),
-        district: data.district.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", context.userId);
+    // 9. Adresse fixe de retrait : Porto-Novo / 3as Recharge (ne modifie plus le profil client)
 
     // 10. Insertion sécurisée de la transaction
     const { data: newTx, error: insertError } = await supabaseAdmin

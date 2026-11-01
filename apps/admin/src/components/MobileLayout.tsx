@@ -30,8 +30,8 @@ export function MobileLayout({ children }: { children: ReactNode }) {
             <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/10" onClick={() => signOut()}>
               <LogOut className="h-5 w-5" />
             </Button>
-            <div className="ml-1 h-11 w-11 rounded-full bg-white shadow-elevated ring-2 ring-white/40 overflow-hidden flex items-center justify-center p-1">
-              <img src="/logo.svg" alt="3AS Recharge" className="h-full w-full object-contain" />
+            <div className="ml-1 h-11 w-11 rounded-full bg-white shadow-elevated ring-2 ring-lime-400/60 overflow-hidden flex items-center justify-center p-0.5">
+              <img src="/3as-logo-official.png" alt="3AS Recharge" className="h-full w-full object-contain" />
             </div>
           </div>
         </div>
@@ -40,9 +40,9 @@ export function MobileLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 pb-24">
         {children}
         <div className="mt-6 px-4">
-          <div className="w-full overflow-hidden rounded-2xl bg-black shadow-elevated flex items-center justify-center p-4 h-[2.5cm] relative">
-            <div className="absolute inset-0 bg-cover bg-center opacity-40" style={{ backgroundImage: "url('/sports_blue_bg.png')" }} />
-            <img src="/logo.svg" alt="3AS Recharge" className="h-full object-contain max-w-full relative z-10 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
+          <div className="w-full overflow-hidden rounded-2xl bg-slate-950 shadow-elevated flex items-center justify-center p-3 h-[2.8cm] relative border border-white/10">
+            <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url('/sports_blue_bg.png')" }} />
+            <img src="/3as-logo-official.png" alt="3AS Recharge" className="h-full object-contain max-w-full relative z-10 drop-shadow-[0_0_20px_rgba(163,230,53,0.35)]" />
           </div>
         </div>
       </main>

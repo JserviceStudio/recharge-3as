@@ -26,12 +26,11 @@ function HistoriquePage() {
       return data ?? [];
     },
     enabled: !!user,
-    // Tant qu'une demande est en cours, on relit toutes les 3 s : le crédit arrive par webhook
-    // quelques secondes après le paiement, et l'écran restait sur « Paiement attendu ».
+    // Auto refresh régulier (30 s) et toutes les 3 s si une demande est en cours
     refetchInterval: (query: any) => {
       const lignes = (query?.state?.data ?? []) as Array<{ status?: string }>;
       const enCours = lignes.some((t) => ["awaiting_payment", "pending", "paid", "crediting"].includes(String(t.status)));
-      return enCours ? 3000 : false;
+      return enCours ? 3000 : 30_000;
     },
     refetchOnWindowFocus: true,
   });

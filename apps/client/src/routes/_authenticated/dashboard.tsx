@@ -65,19 +65,26 @@ function Dashboard() {
         <h1 className="text-2xl font-bold text-foreground">{profile?.full_name ?? "Client"} 👋</h1>
       </div>
 
-      {isVerified === false && (
-        <Card className="shadow-card border-warning/20 bg-warning/5">
+      {/* Account verification status box from real profile */}
+      {profile && (
+        <Card className={`shadow-card ${profile.is_verified ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
           <CardContent className="p-4 flex flex-row items-center justify-between gap-4">
             <div className="space-y-1 flex-1">
-              <div className="text-sm font-bold text-warning flex items-center gap-1.5">
+              <div className={`text-sm font-bold flex items-center gap-1.5 ${profile.is_verified ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                 <ShieldCheck className="h-4 w-4" />
-                Compte non vérifié
+                {profile.is_verified ? "Compte vérifié" : "Compte non vérifié"}
               </div>
-              <p className="text-xs text-muted-foreground">Faites votre premier rechargement pour valider votre compte.</p>
+              <p className="text-xs text-muted-foreground">
+                {profile.is_verified
+                  ? "Votre identité et numéro sont validés. Tous les services de recharge et de retrait sont activés."
+                  : "Faites votre premier rechargement pour valider votre compte et activer les retraits."}
+              </p>
             </div>
-            <Button size="sm" variant="outline" className="border-warning text-warning hover:bg-warning/10 shrink-0" asChild>
-              <Link to="/verification">Vérifier</Link>
-            </Button>
+            {!profile.is_verified && (
+              <Button size="sm" variant="outline" className="border-amber-500 text-amber-600 hover:bg-amber-500/10 shrink-0" asChild>
+                <Link to="/verification">Vérifier</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

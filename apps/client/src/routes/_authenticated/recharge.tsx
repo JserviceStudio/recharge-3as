@@ -44,16 +44,40 @@ function RechargePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
 
-  // La sélection du réseau se fera directement sur la page FedaPay
+  const { data: profile } = useQuery({
+    queryKey: ["profile-recharge", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("*").eq("id", user!.id).maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
 
+  const { data: lastTx } = useQuery({
+    queryKey: ["last-tx-recharge", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("transactions")
+        .select("id_1xbet, recipient_number, amount")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const defaultAmount = typeof window !== "undefined"
+    ? Number(localStorage.getItem("last_amount") ?? "5000") || 5000
+    : 5000;
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
-      id_1xbet: "",
-      amount: Number(localStorage.getItem("last_amount") ?? "100") || 100,
+      id_1xbet: (user?.user_metadata?.id_1xbet as string) || "",
+      amount: defaultAmount,
       phone: user?.user_metadata?.phone || user?.phone || "",
       country: "BJ",
       network: "mtn_bj",
@@ -61,19 +85,29 @@ function RechargePage() {
   });
   const pays = form.watch("country") as CodePays;
 
-  // Pré-remplit l'ID 1XBET et le montant utilisés lors de la dernière recharge
+  // Pré-remplit l'ID 1XBET et le téléphone depuis le vrai profil / dernière transaction
   useEffect(() => {
-    const savedId = localStorage.getItem("last_id_1xbet");
+    const savedId = localStorage.getItem("last_id_1xbet") || lastTx?.id_1xbet || (user?.user_metadata?.id_1xbet as string);
     if (savedId) form.setValue("id_1xbet", savedId);
+
     const savedAmount = localStorage.getItem("last_amount");
-    if (savedAmount) form.setValue("amount", Number(savedAmount) || 100, { shouldValidate: true });
-    // Dernier réseau utilisé (ancien code « mtn » compris) : le pays suit le réseau.
+    if (savedAmount) {
+      form.setValue("amount", Number(savedAmount) || 5000, { shouldValidate: true });
+    } else {
+      form.setValue("amount", 5000, { shouldValidate: true });
+    }
+
+    const phoneValue = profile?.phone || lastTx?.recipient_number || user?.user_metadata?.phone || user?.phone;
+    if (phoneValue) {
+      form.setValue("phone", phoneValue);
+    }
+
     const savedNetwork = reseauRecharge(localStorage.getItem("last_network"));
     if (savedNetwork) {
       form.setValue("country", savedNetwork.pays);
       form.setValue("network", savedNetwork.code);
     }
-  }, []);
+  }, [profile, lastTx, user, form]);
 
 
 

@@ -306,34 +306,32 @@ describe("Retrait 3AS - Tests unitaires et intégration", () => {
         }
       };
 
-      // Ville manquante
-      const invalidDataVille = {
+      // Nom manquant (l'adresse de caisse étant fixée sur Porto-Novo / 3as Recharge, city/district ne sont plus requis)
+      const invalidDataNom = {
         idempotency_key: crypto.randomUUID(),
-        city: "",
-        district: "Quartier Haie Vive",
         app_code: "1xbet",
         id_1xbet: "123456",
         tx_id: "CODE1234",
         amount: 5000,
-        recipient_name: "Jean Dupont",
+        recipient_name: "",
         recipient_country: "BJ",
         payment_method_id: crypto.randomUUID(),
         recipient_number: "96000000",
       };
-      expect(() => validateInput(invalidDataVille)).toThrow("La ville est obligatoire");
+      expect(() => validateInput(invalidDataNom)).toThrow("Nom et prénom Mobile Money requis");
 
       // Montant invalide
       const invalidDataMontant = {
-        ...invalidDataVille,
-        city: "Cotonou",
+        ...invalidDataNom,
+        recipient_name: "Jean Dupont",
         amount: -500,
       };
       expect(() => validateInput(invalidDataMontant)).toThrow("Montant invalide");
 
       // Code de retrait trop court (< 4 caractères)
       const invalidDataCode = {
-        ...invalidDataVille,
-        city: "Cotonou",
+        ...invalidDataNom,
+        recipient_name: "Jean Dupont",
         tx_id: "ABC",
       };
       expect(() => validateInput(invalidDataCode)).toThrow(

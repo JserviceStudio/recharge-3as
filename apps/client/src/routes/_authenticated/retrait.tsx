@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState, useEffect } from "react";
-import { Loader2, Info, CheckCircle2, ArrowRight } from "lucide-react";
+import { Loader2, Info, CheckCircle2, ArrowRight, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -26,9 +26,9 @@ import { getWithdrawalContext, submitWithdrawal } from "@/actions/orchestrators/
 import { CodePays, PAYS, normaliserNumero } from "@/lib/mobile-money";
 
 const schema = z.object({
-  city: z.string().trim().min(1, "La ville est obligatoire").max(100),
-  district: z.string().trim().min(1, "La rue ou le quartier est obligatoire").max(150),
-  app_code: z.string().trim().min(1, "Choisissez une application"),
+  city: z.string().optional().default("Porto-Novo"),
+  district: z.string().optional().default("3as Recharge"),
+  app_code: z.string().default("1xbet"),
   id_1xbet: z.string().trim().regex(/^\d+$/, "L'ID joueur doit comporter uniquement des chiffres"),
   tx_id: z.string().trim().regex(/^[a-zA-Z0-9]{4,80}$/, "Le code de retrait doit comporter entre 4 et 80 caractères alphanumériques"),
   amount: z.coerce.number().int("Le montant doit être un entier").positive("Montant invalide"),
@@ -65,8 +65,8 @@ function RetraitPage() {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      city: "",
-      district: "",
+      city: "Porto-Novo",
+      district: "3as Recharge",
       app_code: "1xbet",
       id_1xbet: "",
       tx_id: "",
@@ -82,8 +82,8 @@ function RetraitPage() {
   useEffect(() => {
     if (!context) return;
 
-    if (context.profile.city) form.setValue("city", context.profile.city);
-    if (context.profile.district) form.setValue("district", context.profile.district);
+    form.setValue("city", "Porto-Novo");
+    form.setValue("district", "3as Recharge");
     if (context.profile.full_name) form.setValue("recipient_name", context.profile.full_name);
     if (context.lastId1xbet) form.setValue("id_1xbet", context.lastId1xbet);
     if (context.minAmount) form.setValue("amount", context.minAmount);
@@ -167,16 +167,14 @@ function RetraitPage() {
       const norm = normaliserNumero(pendingValues.recipient_country, pendingValues.recipient_number);
       const cleanPhone = norm ? norm.e164 : pendingValues.recipient_number;
 
-      const appName = context?.apps.find((a) => a.code === pendingValues.app_code)?.name || pendingValues.app_code.toUpperCase();
-
       const msg = `👋 Bonjour l'équipe 3AS, je souhaite finaliser mon retrait !
 
-🎮 *Application* : ${appName}
+🎮 *Application* : 1XBET
 👤 *ID Compte* : ${pendingValues.id_1xbet}
 💰 *Montant* : ${pendingValues.amount.toLocaleString("fr-FR")} FCFA
 📱 *Numéro réception* : ${cleanPhone} (${method?.name || "Mobile Money"})
 👤 *Nom bénéficiaire* : ${pendingValues.recipient_name}
-📍 *Adresse* : ${pendingValues.city}, ${pendingValues.district}
+📍 *Adresse de retrait* : Porto-Novo, 3as Recharge
 
 👉 *Lien de validation Admin* :
 ${adminLink}
@@ -196,7 +194,7 @@ ${adminLink}
   };
 
   const selectedMethod = context?.paymentMethods.find((m) => m.id === pendingValues?.payment_method_id);
-  const selectedAppName = context?.apps.find((a) => a.code === pendingValues?.app_code)?.name || pendingValues?.app_code;
+  const selectedAppName = context?.apps.find((a) => a.code === pendingValues?.app_code)?.name || pendingValues?.app_code || "1xbet";
 
   return (
     <div className="px-4 py-5 max-w-md mx-auto space-y-4">
@@ -209,7 +207,7 @@ ${adminLink}
             Comment ça marche
           </div>
           <p className="text-xs text-muted-foreground">
-            1. Générez un code de retrait dans votre application (caisse 3AS).
+            1. Générez un code de retrait dans votre application 1xbet.
             <br />
             2. Renseignez vos coordonnées de réception et le code.
             <br />
@@ -217,6 +215,22 @@ ${adminLink}
           </p>
         </CardContent>
       </Card>
+
+      {/* Adresse de retrait obligatoire à confirmer */}
+      <div className="p-3.5 bg-blue-500/10 border border-blue-500/25 rounded-2xl space-y-1.5 text-xs shadow-sm">
+        <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300 tracking-wide uppercase">
+          <MapPin className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <span>*VEUILLEZ CONFIRMER L'ADRESSE DU RETRAIT</span>
+        </div>
+        <div className="pl-5 space-y-1 text-slate-700 dark:text-slate-200">
+          <div>
+            Ville : <span className="text-blue-600 dark:text-blue-400 font-bold font-medium-lg">Porto-Novo</span>
+          </div>
+          <div>
+            Rue : <span className="text-blue-600 dark:text-blue-400 font-bold font-medium-lg">3as Recharge</span>
+          </div>
+        </div>
+      </div>
 
       {context && (
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -252,37 +266,18 @@ ${adminLink}
         <form onSubmit={form.handleSubmit(onValidateForm)} className="space-y-4">
           <Card className="shadow-card">
             <CardContent className="p-4 space-y-4">
-              {/* 1. Adresse : Ville et Quartier / Rue */}
-              <div className="space-y-3 pb-2 border-b">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  1. Votre adresse (KYC)
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Ville" error={form.formState.errors.city?.message}>
-                    <Input placeholder="Ex: Cotonou" {...form.register("city")} />
-                  </Field>
-                  <Field label="Rue / Quartier" error={form.formState.errors.district?.message}>
-                    <Input placeholder="Ex: Cadjèhoun" {...form.register("district")} />
-                  </Field>
-                </div>
-              </div>
-
-              {/* 2. Application */}
+              {/* Application fixe 1xbet */}
               <Field label="Application de paris" error={form.formState.errors.app_code?.message}>
-                <Select
-                  value={form.watch("app_code")}
-                  onValueChange={(v) => form.setValue("app_code", v, { shouldValidate: true })}
-                >
-                  <SelectTrigger><SelectValue placeholder="Choisir l'application" /></SelectTrigger>
-                  <SelectContent>
-                    {context?.apps.map((a) => (
-                      <SelectItem key={a.code} value={a.code}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value="1xbet"
+                  readOnly
+                  disabled
+                  className="bg-muted font-bold text-foreground cursor-not-allowed opacity-90"
+                  {...form.register("app_code")}
+                />
               </Field>
 
-              {/* 3. User ID */}
+              {/* ID Joueur */}
               <Field label="ID Joueur (chiffres uniquement)" error={form.formState.errors.id_1xbet?.message}>
                 <Input
                   inputMode="numeric"
@@ -291,7 +286,7 @@ ${adminLink}
                 />
               </Field>
 
-              {/* 4. Code de retrait */}
+              {/* Code de retrait */}
               <Field label="Code de retrait" error={form.formState.errors.tx_id?.message}>
                 <Input
                   placeholder="Code alphanumérique reçu"
@@ -300,22 +295,23 @@ ${adminLink}
                 />
               </Field>
 
-              {/* 5. Montant */}
-              <Field label="Montant à retirer (FCFA)" error={form.formState.errors.amount?.message}>
+              {/* Montant */}
+              <Field label="Montant à retirer (minimum 900 F)" error={form.formState.errors.amount?.message}>
                 <Input
                   type="number"
                   inputMode="numeric"
-                  placeholder="Ex: 5000"
+                  placeholder="Ex : 900"
+                  min={context?.minAmount ?? 900}
                   {...form.register("amount")}
                 />
               </Field>
 
-              {/* 6. Nom et prénoms Mobile Money */}
+              {/* Nom et prénoms Mobile Money */}
               <Field label="Nom et prénoms sur le compte Mobile Money" error={form.formState.errors.recipient_name?.message}>
                 <Input placeholder="Ex: Jean DUPONT" {...form.register("recipient_name")} />
               </Field>
 
-              {/* 7. Pays (seuls les pays ayant un moyen actif) */}
+              {/* Pays de réception */}
               <Field label="Pays de réception">
                 <Select
                   value={selectedCountry}
@@ -329,14 +325,14 @@ ${adminLink}
                   <SelectContent>
                     {activeCountries.map((c) => (
                       <SelectItem key={c} value={c}>
-                        {PAYS[c]?.nom || c} (+{PAYS[c]?.indicatif})
+                        {PAYS[c as CodePays]?.nom || c} (+{PAYS[c as CodePays]?.indicatif})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
 
-              {/* 8. Numéro de réception */}
+              {/* Numéro de réception */}
               <Field
                 label={`Numéro de réception (${PAYS[selectedCountry]?.nom})`}
                 error={form.formState.errors.recipient_number?.message}
@@ -354,19 +350,32 @@ ${adminLink}
                 </div>
               </Field>
 
-              {/* 9. Moyen de paiement filtré par pays */}
-              <Field label="Moyen de paiement Mobile Money" error={form.formState.errors.payment_method_id?.message}>
-                <Select
-                  value={form.watch("payment_method_id")}
-                  onValueChange={(v) => form.setValue("payment_method_id", v, { shouldValidate: true })}
-                >
-                  <SelectTrigger><SelectValue placeholder="Choisir un opérateur" /></SelectTrigger>
-                  <SelectContent>
-                    {methodsForCountry.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Moyen de paiement filtré par pays */}
+              <Field label="Choisir votre réseau Mobile Money" error={form.formState.errors.payment_method_id?.message}>
+                {methodsForCountry.length === 0 ? (
+                  <div className="p-3 bg-muted rounded-md text-xs text-muted-foreground border">
+                    Aucun opérateur disponible, contactez le support
+                  </div>
+                ) : (
+                  <Select
+                    value={form.watch("payment_method_id")}
+                    onValueChange={(v) => form.setValue("payment_method_id", v, { shouldValidate: true })}
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Choisir votre réseau Mobile Money" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {methodsForCountry.map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="cursor-pointer font-medium py-2.5">
+                          <span className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-primary" />
+                            {m.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </Field>
             </CardContent>
           </Card>
@@ -376,7 +385,7 @@ ${adminLink}
             className="w-full h-12 bg-gradient-brand font-semibold cursor-pointer"
             disabled={submitting || isVerified === false}
           >
-            Vérifier la demande <ArrowRight className="h-4 w-4 ml-2" />
+            Valider la demande <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </form>
       )}
@@ -403,10 +412,8 @@ ${adminLink}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Adresse KYC</span>
-                  <span className="font-medium text-foreground">
-                    {pendingValues.city}, {pendingValues.district}
-                  </span>
+                  <span>Adresse du retrait (caisse)</span>
+                  <span className="font-medium text-foreground">Porto-Novo, 3as Recharge</span>
                 </div>
                 <div className="flex justify-between items-center text-xs text-muted-foreground">
                   <span>Bénéficiaire</span>
@@ -436,7 +443,7 @@ ${adminLink}
               </div>
 
               <p className="text-xs text-muted-foreground text-center">
-                Après confirmation, notre équipe vérifiera votre code de retrait auprès de la caisse pour transférer immédiatement vos fonds.
+                Après confirmation, notre équipe vérifiera votre code de retrait auprès de 1xbet pour transférer immédiatement vos fonds.
               </p>
             </div>
           )}
