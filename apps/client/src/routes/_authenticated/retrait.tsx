@@ -70,7 +70,7 @@ function RetraitPage() {
       app_code: "1xbet",
       id_1xbet: "",
       tx_id: "",
-      amount: 900,
+      amount: "" as any,
       recipient_name: "",
       recipient_country: "BJ",
       payment_method_id: "",
@@ -86,7 +86,6 @@ function RetraitPage() {
     form.setValue("district", "3as Recharge");
     if (context.profile.full_name) form.setValue("recipient_name", context.profile.full_name);
     if (context.lastId1xbet) form.setValue("id_1xbet", context.lastId1xbet);
-    if (context.minAmount) form.setValue("amount", context.minAmount);
 
     // Détermination des pays actifs
     const activeCountries = Array.from(new Set(context.paymentMethods.map((m) => m.country as CodePays)));
@@ -232,19 +231,6 @@ ${adminLink}
         </div>
       </div>
 
-      {context && (
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="p-2.5 rounded-lg border bg-muted/40">
-            <span className="text-muted-foreground">Minimum : </span>
-            <strong className="font-semibold text-foreground">{context.minAmount.toLocaleString("fr-FR")} FCFA</strong>
-          </div>
-          <div className="p-2.5 rounded-lg border bg-muted/40">
-            <span className="text-muted-foreground">Plafond restant : </span>
-            <strong className="font-semibold text-foreground">{context.remainingDailyLimit.toLocaleString("fr-FR")} FCFA</strong>
-          </div>
-        </div>
-      )}
-
       {isVerified === false && (
         <Card className="bg-destructive/5 border-destructive/20 mt-4">
           <CardContent className="p-4 space-y-1">
@@ -296,12 +282,11 @@ ${adminLink}
               </Field>
 
               {/* Montant */}
-              <Field label="Montant à retirer (minimum 900 F)" error={form.formState.errors.amount?.message}>
+              <Field label="Montant à retirer (FCFA)" error={form.formState.errors.amount?.message}>
                 <Input
                   type="number"
                   inputMode="numeric"
-                  placeholder="Ex : 900"
-                  min={context?.minAmount ?? 900}
+                  placeholder="10000"
                   {...form.register("amount")}
                 />
               </Field>
